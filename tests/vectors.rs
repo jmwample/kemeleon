@@ -1,8 +1,9 @@
-#![cfg(feature = "deterministic")]
 
+#![allow(deprecated)]
+
+use ml_kem::*;
 use ::kem::Decapsulate;
 use hybrid_array::Array;
-use ml_kem::*;
 
 pub struct GenerateVector {
     pub z: [u8; 32],

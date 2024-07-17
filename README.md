@@ -1,10 +1,13 @@
-# Randomizing Kyber Key Encoding
+# Kemeleon
+Algorithms for Obfuscating ML-KEM handshake materials.
 
-Workspace for testing out different ways of encoding Kyber encapsulation keys such that
-they are computationally indistinguishable from random by an observer.
+## Why?
 
+This library implements obfuscating encoding schemes for ML-KEM encapsulation
+keys and ciphertext messages such that they are computationally indistinguishable
+from random by a passive observer.
 
-**Why aren't the NTT encodings from the FIPS spec (`ByteEncode_d(F)` and `4 ByteDecode_d(B)`) sufficient?**
+**Why aren't the NTT encodings from the FIPS spec (`ByteEncode_d(F)`, `ByteDecode_d(B)`, etc.) sufficient?**
 
 The wire format of the encapsulation key is trivially distinguishable from uniform
 random becuase they values are 12 bit values where all are computed mod Q. Thus
@@ -12,8 +15,16 @@ all values are 12 bits, but always less than 3329.
 
 ---
 
-## Ideal Features
+## Kemeleon
 
+![Encapsulation Key Encoding Scheme](doc/kemeleon_ek_scheme_gunther_etal.png "Encapsulation Key Encoding")
+
+![Ciphertext Encoding Scheme](doc/kemeleon_ct_scheme_gunther_etal.png "Ciphertext Encoding")
+
+
+---
+
+## Ideal Features
 
 - Deterministically generated
   - i.e. empty bits cannot just be filled with randomness that is not tracked
@@ -36,10 +47,4 @@ secret decapsulation key.
 - [_Hash2Curve_] \(not sure this even makes sense for ML-KEM schemes, but) creating an encapsulation
 key based on a hashed value may use a different algorithm than the "`decoding`"
 
-
-## Kemeleon
-
-![Encapsulation Key Encoding Scheme](doc/kemeleon_ek_scheme_gunther_etal.png "Encapsulation Key Encoding")
-
-![Ciphertext Encoding Scheme](doc/kemeleon_ct_scheme_gunther_etal.png "Ciphertext Encoding")
 

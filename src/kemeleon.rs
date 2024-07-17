@@ -58,11 +58,6 @@ impl ValueArrayDecoder for Kemeleon {
 }
 
 impl Kemeleon {
-    const MSB_512: u64 = 5991;
-    const MSB_768: u64 = 8987;
-    const MSB_1024: u64 = 11982;
-
-
     fn encode_priv(p: &ValueArray) -> (Vec<u8>, bool) {
         let mut out = BigUint::ZERO;
         let base = BigUint::from(FieldElement::Q);
@@ -95,7 +90,8 @@ mod tests {
         let k = crate::tests::from_rand_rng(&mut rng);
 
         let c = Kemeleon::encode(&k);
-        dbg!(hex::encode(&c));
+        // let out = hex::encode(&c);
+        // dbg!(&out);
         let p = Kemeleon::decode(c).expect("failed decode");
 
         assert_eq!(k, p)
@@ -105,13 +101,15 @@ mod tests {
     #[test]
     fn compute_constants() {
         let q = BigUint::from(FieldElement::Q);
+        let expected_lengths = [2995, 5990, 8986, 11981];
 
         let n = 256;
         for k in [1, 2, 3, 4] {
             let v: BigUint = q.pow(n * k) + 1u32;
 
             let bits = v.bits()-1;
-            println!("{} {}", bits, bits%8)
+            assert_eq!(bits, expected_lengths[k as usize -1]);
+            // println!("{} {}", bits, bits%8)
         }
     }
 }

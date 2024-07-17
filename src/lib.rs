@@ -47,7 +47,7 @@ pub trait ValueArrayDecoder {
 // Encoding Sizes and Generics
 // ========================================================================== //
 
-trait EncodingSize {
+pub trait EncodingSize {
     const USIZE: usize = 12;
     const VALUE_STEP: usize = 2;
     const BYTE_STEP: usize = 3;
@@ -57,6 +57,7 @@ trait EncodingSize {
     const ENCODED_SIZE: usize;
     const MSB_BITMASK: u8;
     const MSB_BITMASK_INV: u8;
+    const HIGH_ORDER_BIT: u64;
 
     const ETA1: usize;
     const ETA2: usize;
@@ -82,6 +83,7 @@ impl EncodingSize for MlKem512Vals {
     const ENCODED_SIZE: usize = 749;
     const MSB_BITMASK: u8 = 0b00011111;
     const MSB_BITMASK_INV: u8 = 0b11100000;
+    const HIGH_ORDER_BIT: u64 = 5991;
 
     const ETA1: usize = 3;
     const ETA2: usize = 2;
@@ -95,6 +97,7 @@ impl EncodingSize for MlKem768Vals {
     const ENCODED_SIZE: usize = 1124;
     const MSB_BITMASK: u8 = 0b00011111;
     const MSB_BITMASK_INV: u8 = 0b11100000;
+    const HIGH_ORDER_BIT: u64 = 8987;
 
     const ETA1: usize = 2;
     const ETA2: usize = 2;
@@ -108,6 +111,7 @@ impl EncodingSize for MlKem1024Vals {
     const ENCODED_SIZE: usize = 1498;
     const MSB_BITMASK: u8 = 0b00011111;
     const MSB_BITMASK_INV: u8 = 0b11100000;
+    const HIGH_ORDER_BIT: u64 = 11982;
 
     const ETA1: usize = 2;
     const ETA2: usize = 2;
@@ -144,8 +148,8 @@ where
 
     /// Decode an ML-Kem CipherText from a wire format byte array using specific
     /// algorithm `A`.
-    pub fn encode_ct<A> (p: Vec<u8>) -> Vec<u8> {
-        p
+    pub fn decode_ct<A: ValueArrayDecoder>(c: impl AsRef<[u8]>) -> Result<ValueArray, Error> {
+        A::decode(c)
     }
 }
 

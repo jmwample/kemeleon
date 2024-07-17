@@ -35,7 +35,7 @@ fn byte_decode<D: EncodingSize>(bytes: impl AsRef<[u8]>)  -> Result<ValueArray, 
     let byte_step = D::BYTE_STEP;
     let mask = (1 << D::USIZE) - 1;
 
-    let mut vals = [0u16; ARR_LEN];
+    let mut vals = [FieldElement(0u16); ARR_LEN];
 
     let vc = vals.chunks_mut(val_step);
     let bc = bytes.as_ref().chunks(byte_step);
@@ -44,13 +44,14 @@ fn byte_decode<D: EncodingSize>(bytes: impl AsRef<[u8]>)  -> Result<ValueArray, 
         xb[..byte_step].copy_from_slice(b);
 
         let x = u128::from_le_bytes(xb);
-        for (j, vj) in v.iter_mut().enumerate() {
-            let val: u16 = (x >> (D::USIZE * j)).truncate();
-            vj.0 = val & mask;
+        for j in 0..v.len() {
+            let val: u16 = (x >> (D::USIZE * j)) as u16;
+            let mut vj = val & mask;
 
             if D::USIZE == 12 {
-                vj.0 %= FieldElement::Q;
+                vj %= FieldElement::Q;
             }
+            v[j] = FieldElement(vj);
         }
     }
 
