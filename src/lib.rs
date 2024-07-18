@@ -2,8 +2,11 @@ use core::marker::PhantomData;
 use std::fmt::Debug;
 use std::io::Error;
 
+
 mod fips;
 pub mod kemeleon;
+pub mod mlkem;
+
 
 #[derive(Copy, Clone, Default, PartialEq, PartialOrd)]
 pub struct FieldElement(pub u16);
@@ -65,19 +68,7 @@ pub trait EncodingSize {
     const DV: usize;
 }
 
-/// `MlKem512` is the parameter set for security category 1, corresponding to key search on a block
-/// cipher with a 128-bit key.
-pub struct MlKem512Vals;
-
-/// `MlKem768` is the parameter set for security category 3, corresponding to key search on a block
-/// cipher with a 192-bit key.
-pub struct MlKem768Vals;
-
-/// `MlKem1024` is the parameter set for security category 5, corresponding to key search on a block
-/// cipher with a 256-bit key.
-pub struct MlKem1024Vals;
-
-impl EncodingSize for MlKem512Vals {
+impl EncodingSize for ::ml_kem::MlKem512Params {
     const K: usize = 2;
 
     const ENCODED_SIZE: usize = 749;
@@ -91,7 +82,7 @@ impl EncodingSize for MlKem512Vals {
     const DV: usize = 4;
 }
 
-impl EncodingSize for MlKem768Vals {
+impl EncodingSize for ::ml_kem::MlKem768Params {
     const K: usize = 3;
 
     const ENCODED_SIZE: usize = 1124;
@@ -105,7 +96,7 @@ impl EncodingSize for MlKem768Vals {
     const DV: usize = 4;
 }
 
-impl EncodingSize for MlKem1024Vals {
+impl EncodingSize for ::ml_kem::MlKem1024Params {
     const K: usize = 4;
 
     const ENCODED_SIZE: usize = 1498;
@@ -119,16 +110,16 @@ impl EncodingSize for MlKem1024Vals {
     const DV: usize = 5;
 }
 
-pub struct Kem<P>
+pub struct Kemx<P>
 where
-    P: EncodingSize,
+    P: ml_kem::KemCore,
 {
     _p: PhantomData<P>,
 }
 
-impl<P> Kem<P>
+impl<P> Kemx<P>
 where
-    P: EncodingSize,
+    P: ml_kem::KemCore,
 {
     /// Live, Laugh Lobotomy. The ValueArray needs to be made generic somehow.
     pub fn encode_ek<A: ValueArrayEncoder>(p: &ValueArray) -> Vec<u8> {

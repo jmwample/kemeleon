@@ -1,3 +1,4 @@
+#![cfg(feature = "deterministic")]
 mod vectors;
 
 use hex_literal::hex;

@@ -1,4 +1,5 @@
 
+#![cfg(feature = "deterministic")]
 #![allow(deprecated)]
 
 use ml_kem::*;

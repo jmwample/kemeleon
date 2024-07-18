@@ -131,6 +131,7 @@ dependencies = [
  "ml-kem",
  "num-bigint",
  "rand",
+ "rand_core",
 ]
 
 [[package]]

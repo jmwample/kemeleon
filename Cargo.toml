@@ -4,16 +4,20 @@ version = "0.1.0"
 edition = "2021"
 
 
+[features]
+deterministic = ["ml-kem/deterministic"]
+
 [dependencies]
 byteorder = "1.5.0"
 num-bigint = "0.4.6"
 rand = "0.8.5"
+ml-kem = "0.1.1"
+hybrid-array = "0.2.0-rc.8"
+rand_core = "0.6.4"
+kem = "0.3.0-pre.0"
 
 
 [dev-dependencies]
 hex = "0.4.3"
 hex-literal = "0.4.1"
-hybrid-array = "0.2.0-rc.9"
-kem = "0.3.0-pre.0"
-ml-kem = { version = "0.1.1", features=["deterministic"] }
 
