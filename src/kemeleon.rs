@@ -5,7 +5,7 @@ use std::io::Error;
 use num_bigint::BigUint;
 
 /// Kemeleon encoding
-struct Kemeleon {}
+pub(crate) struct Kemeleon {}
 
 /// In this formulation a is 1 indexed (as oposed to being 0 indexed)
 ///

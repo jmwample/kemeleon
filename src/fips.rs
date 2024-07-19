@@ -1,12 +1,18 @@
+//! Rust ML-KEM encodings following the [FIPS 203 Initial Public Draft](https://csrc.nist.gov/pubs/fips/203/ipd)
+//!
+//! This code was drawn almost directly from the [`ml-kem`](https://docs.rs/ml-kem) crate.
 
+use crate::{EncodingSize, FieldElement, ValueArray, ARR_LEN};
 use std::io::Error;
-use crate::{ValueArray, EncodingSize, FieldElement, ARR_LEN};
 
+// ========================================================================== //
+// FIPs spec Encoding
+// ========================================================================== //
 
 // Algorithm 4 ByteEncode_d(F)
 //
 // Note: This algorithm performs compression as well as encoding.
-fn byte_encode<D: EncodingSize>(vals: &ValueArray) -> Vec<u8> {
+pub(crate) fn byte_encode<D: EncodingSize>(vals: &ValueArray) -> Vec<u8> {
     let val_step = D::VALUE_STEP;
     let byte_step = D::BYTE_STEP;
 
@@ -30,7 +36,7 @@ fn byte_encode<D: EncodingSize>(vals: &ValueArray) -> Vec<u8> {
 // Algorithm 5 ByteDecode_d(F)
 //
 // Note: This function performs decompression as well as decoding.
-fn byte_decode<D: EncodingSize>(bytes: impl AsRef<[u8]>)  -> Result<ValueArray, Error> {
+pub(crate) fn byte_decode<D: EncodingSize>(bytes: impl AsRef<[u8]>) -> Result<ValueArray, Error> {
     let val_step = D::VALUE_STEP;
     let byte_step = D::BYTE_STEP;
     let mask = (1 << D::USIZE) - 1;
