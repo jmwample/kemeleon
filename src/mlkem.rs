@@ -2,13 +2,19 @@ use core::fmt::Debug;
 use std::{io::Error as IoError, marker::PhantomData};
 
 use crate::{
-    fips, kemeleon::Kemeleon, EncodingSize, Transcode, ValueArray, ValueArrayDecoder,
-    ValueArrayEncoder,
+    kemeleon::KemeleonEk,
+    EncodingSize,
+    Transcode,
+    // ValueArrayEncoder, ValueArray, ValueArrayDecoder,
 };
 
 use kem::{Decapsulate, Encapsulate};
-use ml_kem::{Encoded, EncodedSizeUser, KemCore, SharedKey};
+use ml_kem::{Ciphertext, KemCore, SharedKey};
 use rand_core::CryptoRngCore;
+
+// ========================================================================== //
+// Kem Equivalent object
+// ========================================================================== //
 
 /// Number of retries to generate a key pair that satisfies the Kemeleon criteria.
 const MAX_RETRIES: usize = 64;
@@ -22,7 +28,7 @@ where
 
 impl<P> Kemx<P>
 where
-    P: ml_kem::KemCore,
+    P: ml_kem::KemCore + EncodingSize,
 {
     pub fn generate(
         rng: &mut impl CryptoRngCore,
@@ -32,11 +38,11 @@ where
 
         for _ in 0..MAX_RETRIES {
             let (dk, ek) = P::generate(rng);
-            if can_encode::<P>(&ek) {
-                let kek = KEncapsulationKey::<P> {
-                    key: ek,
-                    byte: msb_rand,
-                };
+            let kek = KEncapsulationKey::<P> {
+                key: ek,
+                byte: msb_rand,
+            };
+            if kek.satisfies_sampling() {
                 let kdk = KDecapsulationKey::<P>(dk);
                 return Ok((kdk, kek));
             }
@@ -46,140 +52,43 @@ where
         panic!("failed to generate key - you have a bad random number generator")
     }
 
-    /// Live, Laugh Lobotomy. The ValueArray needs to be made generic somehow.
-    pub fn encode_ek<A: ValueArrayEncoder>(p: &ValueArray) -> Vec<u8> {
-        A::encode(p)
-    }
+    // /// Live, Laugh Lobotomy. The ValueArray needs to be made generic somehow.
+    // pub fn encode_ek<A: ValueArrayEncoder>(p: &ValueArray) -> Vec<u8> {
+    //     A::encode(p)
+    // }
 
-    /// Live, Laugh Lobotomy. The ValueArray needs to be made generic somehow.
-    pub fn decode_ek<A: ValueArrayDecoder>(c: impl AsRef<[u8]>) -> Result<ValueArray, IoError> {
-        A::decode(c)
-    }
+    // /// Live, Laugh Lobotomy. The ValueArray needs to be made generic somehow.
+    // pub fn decode_ek<A: ValueArrayDecoder>(c: impl AsRef<[u8]>) -> Result<ValueArray, IoError> {
+    //     A::decode(c)
+    // }
 
-    /// Encode an ML-Kem CipherText into a wire format byte array using specific
-    /// algorithm `A`.
-    pub fn encode_ct<A>(p: Vec<u8>) -> Vec<u8> {
-        p
-    }
+    // /// Encode an ML-Kem CipherText into a wire format byte array using specific
+    // /// algorithm `A`.
+    // pub fn encode_ct<A>(p: Vec<u8>) -> Vec<u8> {
+    //     p
+    // }
 
-    /// Decode an ML-Kem CipherText from a wire format byte array using specific
-    /// algorithm `A`.
-    pub fn decode_ct<A: ValueArrayDecoder>(c: impl AsRef<[u8]>) -> Result<ValueArray, IoError> {
-        A::decode(c)
-    }
+    // /// Decode an ML-Kem CipherText from a wire format byte array using specific
+    // /// algorithm `A`.
+    // pub fn decode_ct<A: ValueArrayDecoder>(c: impl AsRef<[u8]>) -> Result<ValueArray, IoError> {
+    //     A::decode(c)
+    // }
 }
 
-fn can_encode<P>(ek: &P::EncapsulationKey) -> bool
-where
-    P: KemCore,
-{
-    true
-}
-
-trait KemeleonEk {
-    type EK;
-    type Error;
-
-    fn can_encode(&self) -> bool;
-
-    fn encode(&self) -> Vec<u8>;
-
-    fn decode(c: impl AsRef<[u8]>) -> Result<Self::EK, Self::Error>;
-}
+// ========================================================================== //
+// Encapsulation Key
+// ========================================================================== //
 
 #[derive(Debug, PartialEq, PartialOrd)]
 pub struct KEncapsulationKey<P>
 where
     P: KemCore,
 {
-    key: P::EncapsulationKey,
-    byte: u8,
+    pub(crate) key: P::EncapsulationKey,
+    pub(crate) byte: u8,
 }
 
-#[derive(Debug, PartialEq, PartialOrd)]
-pub struct KDecapsulationKey<P>(P::DecapsulationKey)
-where
-    P: KemCore;
-
-#[derive(Debug, PartialEq, PartialOrd)]
-pub struct EncodedCiphertext<P>
-where
-    P: KemCore,
-{
-    bytes: Vec<u8>,
-    _p: PhantomData<P>,
-}
-
-impl<P> EncodedCiphertext<P>
-where
-    P: KemCore,
-{
-    pub fn as_bytes(&self) -> Vec<u8> {
-        self.bytes.clone()
-    }
-
-    pub fn from_bytes(b: impl AsRef<[u8]>) -> Result<Self, IoError> {
-        if b.as_ref().is_empty() {
-            return Err(IoError::other("bad bytestring provided"));
-        }
-        Ok(Self {
-            bytes: b.as_ref().to_vec(),
-            _p: PhantomData,
-        })
-    }
-}
-
-impl<P> KEncapsulationKey<P>
-where
-    P: KemCore + EncodingSize,
-{
-    pub fn as_bytes(&self) -> Vec<u8> {
-        self.key.as_bytes().to_vec()
-    }
-
-    pub fn from_bytes(b: impl AsRef<[u8]>) -> Result<Self, IoError> {
-        if b.as_ref().is_empty() {
-            return Err(IoError::other("bad bytestring provided"));
-        }
-
-        // try decode as kemeleon
-        let kek = Kemeleon::decode(b)?;
-
-        // re-encode as fips
-        let fips = fips::byte_encode::<P>(&kek);
-
-        // parse as an ml-kem::EncapsulationKey
-        #[allow(deprecated)]
-        let ek_bytes = Encoded::<<P as KemCore>::EncapsulationKey>::from_slice(&fips);
-        let key = <P as KemCore>::EncapsulationKey::from_bytes(ek_bytes);
-
-        Ok(Self { key, byte: 0x00 })
-    }
-}
-
-impl<P> KemeleonEk for KEncapsulationKey<P>
-where
-    P: KemCore,
-{
-    type EK = Self;
-    type Error = IoError;
-
-    fn encode(&self) -> Vec<u8> {
-        vec![]
-    }
-
-    fn decode(c: impl AsRef<[u8]>) -> Result<Self::EK, Self::Error> {
-        #[allow(deprecated)] // I don't understand what they want for the TryFrom format.
-        let ek_bytes = Encoded::<<P as KemCore>::EncapsulationKey>::from_slice(c.as_ref());
-        let key = <P as KemCore>::EncapsulationKey::from_bytes(ek_bytes);
-
-        Ok(KEncapsulationKey { key, byte: 0x00 })
-    }
-
-    fn can_encode(&self) -> bool {
-        true
-    }
-}
+impl<P> KEncapsulationKey<P> where P: KemCore + EncodingSize {}
 
 impl<P> Encapsulate<EncodedCiphertext<P>, SharedKey<P>> for KEncapsulationKey<P>
 where
@@ -191,9 +100,41 @@ where
         &self,
         rng: &mut impl CryptoRngCore,
     ) -> Result<(EncodedCiphertext<P>, SharedKey<P>), Self::Error> {
-        EncodedCiphertext::<P>::from_fips(self.key.encapsulate(rng))
+        let (ek, ss) = self
+            .key
+            .encapsulate(rng)
+            .map_err(|_| IoError::other("failed encapsulation"))?;
+        Ok((EncodedCiphertext::<P>::from_fips(&ek), ss))
     }
 }
+
+impl<P> Transcode for KEncapsulationKey<P>
+where
+    P: KemCore + EncodingSize,
+    <P as KemCore>::EncapsulationKey: Clone,
+{
+    type Fips = <P as KemCore>::EncapsulationKey;
+
+    fn as_fips(&self) -> Self::Fips {
+        self.key.clone()
+    }
+
+    fn from_fips(t: &Self::Fips) -> Self {
+        Self {
+            key: t.clone(),
+            byte: 0x00u8,
+        }
+    }
+}
+
+// ========================================================================== //
+// Decapsulation Key
+// ========================================================================== //
+
+#[derive(Debug, PartialEq, PartialOrd)]
+pub struct KDecapsulationKey<P>(P::DecapsulationKey)
+where
+    P: KemCore;
 
 impl<P> Decapsulate<EncodedCiphertext<P>, SharedKey<P>> for KDecapsulationKey<P>
 where
@@ -205,40 +146,49 @@ where
         &self,
         encapsulated_key: &EncodedCiphertext<P>,
     ) -> Result<SharedKey<P>, Self::Error> {
-        let ek = encapsulated_key.to_fips();
-        self.0.decapsulate(ek)
+        let ek = encapsulated_key.as_fips();
+        self.0.decapsulate(&ek)
     }
 }
 
-impl<P> Transcode for KEncapsulationKey<P>
-where
-    P: KemCore + EncodingSize,
-{
-    type Fips = <P as KemCore>::EncapsulationKey;
-    fn to_fips(&self) -> Self::Fips {}
+// ========================================================================== //
+// Ciphertext encoding
+// ========================================================================== //
 
-    fn from_fips(t: &Self::Fips) -> Self {}
+#[derive(Debug, PartialEq, PartialOrd)]
+pub struct EncodedCiphertext<P>
+where
+    P: KemCore,
+{
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) _p: PhantomData<P>,
 }
 
+// TODO this is likely incorrect / incomplete i just made it this way so it would
+// compile so I could get tests compiling first.
 impl<P> Transcode for EncodedCiphertext<P>
 where
     P: KemCore,
-    <P as KemCore>::CiphertextSize: EncodedSizeUser,
 {
     type Fips = ml_kem::Ciphertext<P>;
 
-    fn to_fips(&self) -> Self::Fips {
-        
+    fn as_fips(&self) -> Self::Fips {
+        #[allow(deprecated)]
+        Ciphertext::<P>::clone_from_slice(&self.bytes)
     }
 
     fn from_fips(t: &Self::Fips) -> Self {
-        
+        Self {
+            bytes: t.to_vec(),
+            _p: PhantomData,
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::kemeleon::Encode;
 
     use ml_kem::{Encoded, EncodedSizeUser, KemCore, MlKem512};
 
@@ -269,10 +219,11 @@ mod test {
             Encoded::<<MlKem512 as ml_kem::KemCore>::EncapsulationKey>::from_slice(&ek_encoded);
         let ek_decoded = <MlKem512 as KemCore>::EncapsulationKey::from_bytes(ek_bytes);
 
-        assert_eq!(ek_decoded, ek.to_fips());
-        let (ct, k_send) = ek_decoded.encapsulate(&mut rng).unwrap();
+        assert_eq!(ek_decoded, ek.as_fips());
+        let (ct, k_send) = ek.encapsulate(&mut rng).unwrap();
 
-        let k_recv = dk.decapsulate(&ct.to_fips()).unwrap();
+        // let ct = Ciphertext::<MlKem512>::from_bytes(ct);
+        let k_recv = dk.decapsulate(&ct).unwrap();
         assert_eq!(k_send, k_recv);
     }
 }

@@ -1,9 +1,68 @@
+//! Implementation of Kemeleon Encodings
+//!
+//! [Paper](https://eprint.iacr.org/2024/1086.pdf).
+//!
+//! ## Usage
+//!
+//! ```
+//! use ml_kem::MlKem512;
+//! let mut rng = rand::thread_rng();
+//! let (dk, ek) = Kemx::<MlKem512>::generate(&mut rng).expect("keygen failed");
+//!
+//! // // Converting the Encapsulation key to bytes and back in order to be sent.
+//! // let ek_encoded: Vec<u8> = ek.as_bytes().to_vec();
+//!
+//! let (ct, k_send) = ek.encapsulate(&mut rng).unwrap();
+//!
+//! // // Converting the ciphertext to bytes and back in order to be sent.
+//! // let ct = Ciphertext::<MlKem512>::from_bytes(ct);
+//!
+//! let k_recv = dk.decapsulate(&ct).unwrap();
+//! assert_eq!(k_send, k_recv);
+//! ```
+//!
+//! ## Explanation
+//!
+//! #### Encapsulation Keys
+//!
+//! ```txt ignore
+//! Kemeleon.Encode(a):
+//!   1 𝑟 ← sum(𝑖=1, 𝑘·𝑛, 𝑞^(𝑖−1) · a[𝑖]
+//!   2 if 𝑟 .bit( ⌈log2 (𝑞^(𝑛·𝑘) + 1) ⌉) = 1:
+//!   3     return ⊥                        // if the most significant bit is 1 -> reject
+//!   4 return 𝑟 .bit(0 : ⌈log2 (𝑞^(𝑛·𝑘) + 1) ⌉ − 1)
+//! ```
+//!
+//! Once encoded in this way the high order byte will have the remainder randomized
+//!
+//! A key encoded in this way can then be decoded using the following algorithm
+//!
+//! ```txt ignore
+//! Kemeleon.Decode(𝑟):
+//!   1 𝑟 .bit( ⌈log2(𝑞^(𝑛·𝑘 + 1) ⌉) ← 0    // set most significant bit to 0
+//!   2 for 𝑖 = 1 to 𝑘 · 𝑛:
+//!   3     a[𝑖] ← ( 𝑟− sum(𝑗=1, 𝑖−1, 𝑝𝑘 [𝑗]) ) / ( 𝑞^(𝑖−1) ) mod 𝑞
+//!   4 return a
+//! ```
+//!
+//! #### Ciphertext
+//!
+//! ```txt ignore
+//! Kemeleon.EncodeCtxt(c = (c1 || c2)):
+//!
+//! ```
+//!
+//! ```txt ignore
+//! Kemeleon.DecodeCtxt(r):
+//!
+//! ```
+
 use core::fmt::Debug;
 use std::io::Error;
 
 mod fips;
 pub mod kemeleon;
-pub mod mlkem;
+mod mlkem;
 
 #[derive(Copy, Clone, Default, PartialEq, PartialOrd)]
 pub(crate) struct FieldElement(pub u16);
@@ -28,6 +87,7 @@ impl From<u16> for FieldElement {
 
 const ARR_LEN: usize = 256;
 
+#[allow(dead_code)]
 impl FieldElement {
     pub const Q: u16 = 3329;
     pub const Q32: u32 = Self::Q as u32;
@@ -36,10 +96,11 @@ impl FieldElement {
 
 type ValueArray = [FieldElement; ARR_LEN];
 
+/// Convert between Kemeleon and `ml-kem` values.
 pub trait Transcode {
     type Fips;
 
-    fn to_fips(&self) -> Self::Fips;
+    fn as_fips(&self) -> Self::Fips;
 
     fn from_fips(t: &Self::Fips) -> Self;
 }
@@ -56,16 +117,26 @@ pub trait ValueArrayDecoder {
 // ========================================================================== //
 
 pub trait EncodingSize {
+    /// Number of bits used to represent field elements
     const USIZE: usize = 12;
+
     const VALUE_STEP: usize = 2;
     const BYTE_STEP: usize = 3;
 
+    /// Number of field elements per equation.
     const K: usize;
 
-    const ENCODED_SIZE: usize;
-    const MSB_BITMASK: u8;
-    const MSB_BITMASK_INV: u8;
+    /// Bitwise Index of the high order bit when computing the kemeleon byte
+    /// representation. Computed as $\left\lceil log_{2}(q^{n\cdot k}+1) \right\rceil$
     const HIGH_ORDER_BIT: u64;
+    /// Size of the Kemeleon encoded string as bytes. $\left\lceil (HIGH\_ORDER\_BIT -1)/8 \right\rceil$
+    const ENCODED_SIZE: usize;
+    /// Bitmask for the high order byte which will be less than a full byte of
+    /// random bits when encoded. $(HIGH\_ORDER\_BIT -1)\ mod\ 8$
+    const MSB_BITMASK: u8;
+    /// Bitmask for the high order byte which will be less than a full byte of
+    /// random bits when encoded. Inversion of [`EncodingSize::MSB_BITMASK`].
+    const MSB_BITMASK_INV: u8;
 
     const ETA1: usize;
     const ETA2: usize;
@@ -116,34 +187,25 @@ impl EncodingSize for ml_kem::MlKem1024 {
 }
 
 // ========================================================================== //
+// Public Interface objects
+// ========================================================================== //
+
+/// ML-KEM with the parameter set for security category 1, corresponding to key search on a block cipher with a 128-bit key.
+pub type MlKem512 = mlkem::Kemx<ml_kem::MlKem512>;
+
+/// ML-KEM with the parameter set for security category 3, corresponding to key search on a block cipher with a 192-bit key.
+pub type MlKem768 = mlkem::Kemx<ml_kem::MlKem768>;
+
+/// ML-KEM with the parameter set for security category 5, corresponding to key search on a block cipher with a 256-bit key.
+pub type MlKem1024 = mlkem::Kemx<ml_kem::MlKem1024>;
+
+// ========================================================================== //
 // Tests
 // ========================================================================== //
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use rand::{CryptoRng, RngCore};
-
-    pub fn from_rand_rng<R: RngCore + CryptoRng>(mut rng: R) -> ValueArray {
-        let mut b = [0u8; ARR_LEN * 2];
-        rng.fill_bytes(&mut b);
-
-        let mut c = [FieldElement(0u16); ARR_LEN];
-        b.chunks_exact(2)
-            .into_iter()
-            .enumerate()
-            .for_each(|(i, a)| {
-                c[i] = FieldElement(u16::from_be_bytes([a[0], a[1]]) % FieldElement::Q)
-            });
-
-        c
-    }
-
-    #[test]
-    fn create() {
-        let mut rng = rand::thread_rng();
-        let _ = from_rand_rng(&mut rng);
-    }
+    // use super::*;
 
     // #[test]
     // fn encode_decode() {
