@@ -58,6 +58,7 @@
 //! ```
 
 use core::fmt::Debug;
+use core::mem::transmute;
 use std::io::Error;
 
 mod fips;

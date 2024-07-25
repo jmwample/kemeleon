@@ -1,13 +1,14 @@
-use crate::{
-    mlkem::EncodedCiphertext, mlkem::KEncapsulationKey as EncapsulationKey, EncodingSize,
-    FieldElement, ValueArray, ARR_LEN,
-};
+use crate::{EncodingSize, FieldElement, ValueArray, ARR_LEN};
 
 use core::marker::PhantomData;
-use std::io::Error as IoError;
+use std::io::{Error as IoError, Write};
 
+use ml_kem::Ciphertext;
 use ml_kem::{Encoded, EncodedSizeUser, KemCore};
 use num_bigint::BigUint;
+
+pub use crate::mlkem::EncodedCiphertext;
+pub use crate::mlkem::KEncapsulationKey as EncapsulationKey;
 
 pub trait Encode {
     type EK;
@@ -137,6 +138,43 @@ where
     }
 }
 
+fn encode_ctxt_priv<P: EncodingSize>(p: &ValueArray) -> Vec<u8> {
+    vec![]
+}
+
+fn decode_ctxt_priv<P>(
+    c: impl AsRef<[u8]>,
+    dst: impl Write,
+) -> Result<ml_kem::Ciphertext<P>, IoError>
+where
+    P: KemCore + EncodingSize,
+{
+    let idx_r1 = P::DV * ARR_LEN;
+    let r1 = &c.as_ref()[..c.as_ref().len() - idx_r1];
+    let r2 = &c.as_ref()[idx_r1..];
+
+    let u = decode::<P>(r2).map_err(|e| IoError::other("error occured while decoding"))?;
+    let c1 = compress(Into::<[u16; ARR_LEN]>::into(u), P::DU);
+    let ctxt: Vec<u8> = c1.iter().zip(r2).map(|(v1, v2)| v1 | v2).collect();
+
+    #[allow(deprecated)]
+    Ok(*Ciphertext::<P>::from_slice(&ctxt))
+}
+
+const QFD: f64 = 4096.0 / 3329.0;
+const DFQ: f64 = 3329.0 / 4096.0;
+
+/// x −→ ⌈((2^d)/q)· x⌋
+fn compress(u: impl AsRef<[u16]>, du: usize) -> Vec<u16> {
+    u.as_ref().iter().map(|v| (*v as f64 * QFD + 0.5) as u16).collect()
+}
+
+/// y −→ ⌈(q/(2^d))· y⌋
+
+fn decompress(c: impl AsRef<[u16]>, du: usize) -> Vec<u16> {
+    c.as_ref().iter().map(|v| (*v as f64 * DFQ + 0.5) as u16).collect()
+}
+
 // ========================================================================== //
 // Tests
 // ========================================================================== //
@@ -144,26 +182,31 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{MlKem1024, MlKem512, MlKem768};
+    use crate::mlkem::Kemx;
+    use core::fmt::Debug;
 
-    fn encode_decode_trial<P: KemCore + EncodingSize>() {
+    fn encode_decode_trial<P>()
+    where
+        P: KemCore + EncodingSize,
+        <P as KemCore>::EncapsulationKey: Debug,
+    {
         let mut rng = rand::thread_rng();
-        let (dk, ek) = P::generate(&mut rng);
+        let (dk, ek) = Kemx::<P>::generate(&mut rng).expect("failed generation");
 
         // TODO: Example of current incongruity -> encode_priv takes byte array as ValueArray
         // but we have an EncapsulationKey. So what to encode?
         let c = encode_priv(&ek).0;
 
-        let p = decode(c).expect("failed decode");
+        let plaintext = decode(c).expect("failed decode");
 
-        assert_eq!(ek, p)
+        assert_eq!(ek, plaintext)
     }
 
     #[test]
     fn encode_decode() {
-        encode_decode_trial::<MlKem512>();
-        encode_decode_trial::<MlKem768>();
-        encode_decode_trial::<MlKem1024>();
+        encode_decode_trial::<ml_kem::MlKem512>();
+        encode_decode_trial::<ml_kem::MlKem768>();
+        encode_decode_trial::<ml_kem::MlKem1024>();
     }
 
     #[test]

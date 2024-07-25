@@ -210,7 +210,7 @@ mod test {
     #[test]
     fn generate_normal() {
         let mut rng = rand::thread_rng();
-        let (dk, ek) = Kemx::<MlKem512>::generate(&mut rng).expect("keygen failed");
+        let (dk, ek) = crate::MlKem512::generate(&mut rng).expect("keygen failed");
 
         let ek_encoded: Vec<u8> = ek.as_bytes().to_vec();
 
