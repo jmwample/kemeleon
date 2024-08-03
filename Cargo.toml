@@ -10,7 +10,7 @@ deterministic = ["ml-kem/deterministic"]
 byteorder = "1.5.0"
 num-bigint = "0.4.6"
 rand = "0.8.5"
-ml-kem = "0.1.1"
+ml-kem = { version="0.1.1", path="../KEMs_clean/ml-kem/"}
 hybrid-array = "0.2.0-rc.8"
 rand_core = "0.6.4"
 kem = "0.3.0-pre.0"

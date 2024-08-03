@@ -143,8 +143,6 @@ checksum = "97b3888a4aecf77e811145cadf6eef5901f4782c53886191b2f693f24761847c"
 [[package]]
 name = "ml-kem"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "860a7986a65e8b6c965082dfeba382302ddad057c21e0830373463e612e67217"
 dependencies = [
  "hybrid-array",
  "kem",

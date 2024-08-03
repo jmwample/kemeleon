@@ -51,28 +51,6 @@ where
         }
         panic!("failed to generate key - you have a bad random number generator")
     }
-
-    // /// Live, Laugh Lobotomy. The ValueArray needs to be made generic somehow.
-    // pub fn encode_ek<A: ValueArrayEncoder>(p: &ValueArray) -> Vec<u8> {
-    //     A::encode(p)
-    // }
-
-    // /// Live, Laugh Lobotomy. The ValueArray needs to be made generic somehow.
-    // pub fn decode_ek<A: ValueArrayDecoder>(c: impl AsRef<[u8]>) -> Result<ValueArray, IoError> {
-    //     A::decode(c)
-    // }
-
-    // /// Encode an ML-Kem CipherText into a wire format byte array using specific
-    // /// algorithm `A`.
-    // pub fn encode_ct<A>(p: Vec<u8>) -> Vec<u8> {
-    //     p
-    // }
-
-    // /// Decode an ML-Kem CipherText from a wire format byte array using specific
-    // /// algorithm `A`.
-    // pub fn decode_ct<A: ValueArrayDecoder>(c: impl AsRef<[u8]>) -> Result<ValueArray, IoError> {
-    //     A::decode(c)
-    // }
 }
 
 // ========================================================================== //
@@ -104,24 +82,27 @@ where
             .key
             .encapsulate(rng)
             .map_err(|_| IoError::other("failed encapsulation"))?;
-        Ok((EncodedCiphertext::<P>::from_fips(&ek), ss))
+        Ok((EncodedCiphertext::<P>::from_fips(ek), ss))
     }
 }
 
 impl<P> Transcode for KEncapsulationKey<P>
 where
     P: KemCore + EncodingSize,
-    <P as KemCore>::EncapsulationKey: Clone,
 {
     type Fips = <P as KemCore>::EncapsulationKey;
 
-    fn as_fips(&self) -> Self::Fips {
-        self.key.clone()
+    fn as_fips(&self) -> &Self::Fips {
+        &self.key
     }
 
-    fn from_fips(t: &Self::Fips) -> Self {
+    fn to_fips(self) -> Self::Fips {
+        self.key
+    }
+
+    fn from_fips(t: Self::Fips) -> Self {
         Self {
-            key: t.clone(),
+            key: t,
             byte: 0x00u8,
         }
     }
@@ -172,12 +153,18 @@ where
 {
     type Fips = ml_kem::Ciphertext<P>;
 
-    fn as_fips(&self) -> Self::Fips {
+
+    fn as_fips(&self) -> &Self::Fips {
+        #[allow(deprecated)]
+        Self::Fips::from_slice(&self.bytes)
+    }
+
+    fn to_fips(self) -> Self::Fips {
         #[allow(deprecated)]
         Ciphertext::<P>::clone_from_slice(&self.bytes)
     }
 
-    fn from_fips(t: &Self::Fips) -> Self {
+    fn from_fips(t: Self::Fips) -> Self {
         Self {
             bytes: t.to_vec(),
             _p: PhantomData,
@@ -219,8 +206,8 @@ mod test {
             Encoded::<<MlKem512 as ml_kem::KemCore>::EncapsulationKey>::from_slice(&ek_encoded);
         let ek_decoded = <MlKem512 as KemCore>::EncapsulationKey::from_bytes(ek_bytes);
 
-        assert_eq!(ek_decoded, ek.as_fips());
         let (ct, k_send) = ek.encapsulate(&mut rng).unwrap();
+        assert_eq!(ek_decoded, ek.to_fips());
 
         // let ct = Ciphertext::<MlKem512>::from_bytes(ct);
         let k_recv = dk.decapsulate(&ct).unwrap();

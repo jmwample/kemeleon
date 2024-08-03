@@ -58,7 +58,6 @@
 //! ```
 
 use core::fmt::Debug;
-use core::mem::transmute;
 use std::io::Error;
 
 mod fips;
@@ -101,9 +100,11 @@ type ValueArray = [FieldElement; ARR_LEN];
 pub trait Transcode {
     type Fips;
 
-    fn as_fips(&self) -> Self::Fips;
+    fn as_fips(&self) -> &Self::Fips;
 
-    fn from_fips(t: &Self::Fips) -> Self;
+    fn to_fips(self) -> Self::Fips;
+
+    fn from_fips(t: Self::Fips) -> Self;
 }
 
 pub trait ValueArrayEncoder {
@@ -118,6 +119,9 @@ pub trait ValueArrayDecoder {
 // ========================================================================== //
 
 pub trait EncodingSize {
+    type EncodedKeyType;
+    type EncodedCiphertextType;
+
     /// Number of bits used to represent field elements
     const USIZE: usize = 12;
 
@@ -146,6 +150,9 @@ pub trait EncodingSize {
 }
 
 impl EncodingSize for ml_kem::MlKem512 {
+    type EncodedKeyType = [u8; 749];
+    type EncodedCiphertextType = [u8; 1498];
+
     const K: usize = 2;
 
     const ENCODED_SIZE: usize = 749;
@@ -160,6 +167,9 @@ impl EncodingSize for ml_kem::MlKem512 {
 }
 
 impl EncodingSize for ml_kem::MlKem768 {
+    type EncodedKeyType = [u8; 1124];
+    type EncodedCiphertextType = [u8; 1498];
+
     const K: usize = 3;
 
     const ENCODED_SIZE: usize = 1124;
@@ -174,6 +184,10 @@ impl EncodingSize for ml_kem::MlKem768 {
 }
 
 impl EncodingSize for ml_kem::MlKem1024 {
+    type EncodedKeyType = [u8; 1498];
+    type EncodedCiphertextType = [u8; 1498];
+
+
     const K: usize = 4;
 
     const ENCODED_SIZE: usize = 1498;
