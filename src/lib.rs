@@ -56,6 +56,7 @@
 //! Kemeleon.DecodeCtxt(r):
 //!
 //! ```
+#![feature(generic_const_exprs)]
 
 use core::fmt::Debug;
 use std::io::Error;
@@ -119,8 +120,8 @@ pub trait ValueArrayDecoder {
 // ========================================================================== //
 
 pub trait EncodingSize {
-    type EncodedKeyType;
-    type EncodedCiphertextType;
+    type EncodedKeyType: AsRef<[u8]> + AsMut<[u8]>;
+    type EncodedCiphertextType: AsRef<[u8]> + AsMut<[u8]>;
 
     /// Number of bits used to represent field elements
     const USIZE: usize = 12;
@@ -149,7 +150,11 @@ pub trait EncodingSize {
     const DV: usize;
 }
 
+/// byte array
+type Barr<const N: usize> = [u8; N];
+
 impl EncodingSize for ml_kem::MlKem512 {
+    // type EncodedKeyType = Barr<Self::ENCODED_SIZE>;
     type EncodedKeyType = [u8; 749];
     type EncodedCiphertextType = [u8; 1498];
 
@@ -186,7 +191,6 @@ impl EncodingSize for ml_kem::MlKem768 {
 impl EncodingSize for ml_kem::MlKem1024 {
     type EncodedKeyType = [u8; 1498];
     type EncodedCiphertextType = [u8; 1498];
-
 
     const K: usize = 4;
 
