@@ -5,7 +5,6 @@ use crate::{
     kemeleon::KemeleonEk,
     EncodingSize,
     Transcode,
-    // ValueArrayEncoder, ValueArray, ValueArrayDecoder,
 };
 
 use kem::{Decapsulate, Encapsulate};

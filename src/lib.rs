@@ -59,7 +59,6 @@
 #![feature(generic_const_exprs)]
 
 use core::fmt::Debug;
-use std::io::Error;
 
 mod fips;
 pub mod kemeleon;
@@ -95,8 +94,6 @@ impl FieldElement {
     pub const Q64: u64 = Self::Q as u64;
 }
 
-type ValueArray = [FieldElement; ARR_LEN];
-
 /// Convert between Kemeleon and `ml-kem` values.
 pub trait Transcode {
     type Fips;
@@ -106,13 +103,6 @@ pub trait Transcode {
     fn to_fips(self) -> Self::Fips;
 
     fn from_fips(t: Self::Fips) -> Self;
-}
-
-pub trait ValueArrayEncoder {
-    fn encode(p: &ValueArray) -> Vec<u8>;
-}
-pub trait ValueArrayDecoder {
-    fn decode(c: impl AsRef<[u8]>) -> Result<ValueArray, Error>;
 }
 
 // ========================================================================== //
@@ -150,8 +140,15 @@ pub trait EncodingSize {
     const DV: usize;
 }
 
+trait EncodedTypes {
+    type EncodedKeyType;
+    type EncodedCiphertextType;
+}
+
 /// byte array
-type Barr<const N: usize> = [u8; N];
+type Barr8<const N: usize> = [u8; N];
+/// Nibble array
+type Barr16<const N: usize> = [u16; N];
 
 impl EncodingSize for ml_kem::MlKem512 {
     // type EncodedKeyType = Barr<Self::ENCODED_SIZE>;
@@ -218,76 +215,3 @@ pub type MlKem768 = mlkem::Kemx<ml_kem::MlKem768>;
 /// ML-KEM with the parameter set for security category 5, corresponding to key search on a block cipher with a 256-bit key.
 pub type MlKem1024 = mlkem::Kemx<ml_kem::MlKem1024>;
 
-// ========================================================================== //
-// Tests
-// ========================================================================== //
-
-#[cfg(test)]
-mod tests {
-    // use super::*;
-
-    // #[test]
-    // fn encode_decode() {
-    //     let mut rng = rand::thread_rng();
-    //     let k = from_rand_rng(&mut rng);
-
-    //     let c = DeadSimple::encode(&k);
-    //     let p = DeadSimple::decode(c).expect("failed decode");
-
-    //     assert_eq!(k, p)
-    // }
-}
-
-//
-// // ========================================================================== //
-// // DeadSimple
-// // ========================================================================== //
-//
-// /// This is a basic encode / decode for ValueArra. It has many flaws wrt.
-// /// the goals that we set out for an ideal encoding.
-// ///
-// /// - values always less than Q (where Q = 3329)
-// /// - 0 bits since we 3329 < 4096 (12 bits) and we encode values using 16 bits
-// /// - out of the 12 bits used per value, only 3329/4096 values are hit
-// struct DeadSimple {}
-//
-// impl ValueArrayEncoder for DeadSimple {
-//     fn encode(p: &ValueArray) -> Vec<u8> {
-//         let mut c = vec![0u8; ARR_LEN * 2];
-//         p.iter().enumerate().for_each(|(i, v)| {
-//             let a = v.0.to_be_bytes();
-//             c[2 * i] = a[0];
-//             c[2 * i + 1] = a[1];
-//         });
-//         c
-//     }
-// }
-//
-// impl ValueArrayDecoder for DeadSimple {
-//     fn decode(c: impl AsRef<[u8]>) -> Result<ValueArray, Error> {
-//         if c.as_ref().len() < ARR_LEN * 2 {
-//             return Err(Error::other("incorrect length"));
-//         }
-//
-//         let mut p = [FieldElement(0u16); ARR_LEN];
-//         c.as_ref()[..ARR_LEN * 2]
-//             .chunks_exact(2)
-//             .into_iter()
-//             .enumerate()
-//             .for_each(|(i, a)| {
-//                 p[i] = FieldElement(u16::from_be_bytes([a[0], a[1]]) % FieldElement::Q)
-//             });
-//
-//         Ok(p)
-//     }
-// }
-//
-// impl DeadSimple {
-//     pub fn encode_value(v: &FieldElement) -> [u8; 2] {
-//         v.0.to_be_bytes()
-//     }
-//
-//     pub fn decode_value(v: [u8; 2]) -> FieldElement {
-//         FieldElement(u16::from_be_bytes(v))
-//     }
-// }

@@ -2,7 +2,7 @@
 //!
 //! This code was drawn almost directly from the [`ml-kem`](https://docs.rs/ml-kem) crate.
 
-use crate::{EncodingSize, FieldElement, ValueArray, ARR_LEN};
+use crate::{EncodingSize, FieldElement, ARR_LEN, Barr16};
 use std::io::Error;
 
 // ========================================================================== //
@@ -12,7 +12,7 @@ use std::io::Error;
 // Algorithm 4 ByteEncode_d(F)
 //
 // Note: This algorithm performs compression as well as encoding.
-pub(crate) fn byte_encode<D: EncodingSize>(vals: &ValueArray) -> Vec<u8> {
+pub(crate) fn byte_encode<D: EncodingSize, const N:usize>(vals: &Barr16<N>) -> Vec<u8> {
     let val_step = D::VALUE_STEP;
     let byte_step = D::BYTE_STEP;
 
@@ -23,7 +23,7 @@ pub(crate) fn byte_encode<D: EncodingSize>(vals: &ValueArray) -> Vec<u8> {
     for (v, b) in vc.zip(bc) {
         let mut x = 0u128;
         for (j, vj) in v.iter().enumerate() {
-            x |= u128::from(vj.0) << (D::USIZE * j);
+            x |= u128::from(*vj) << (D::USIZE * j);
         }
 
         let xb = x.to_le_bytes();
@@ -36,12 +36,12 @@ pub(crate) fn byte_encode<D: EncodingSize>(vals: &ValueArray) -> Vec<u8> {
 // Algorithm 5 ByteDecode_d(F)
 //
 // Note: This function performs decompression as well as decoding.
-pub(crate) fn byte_decode<D: EncodingSize>(bytes: impl AsRef<[u8]>) -> Result<ValueArray, Error> {
+pub(crate) fn byte_decode<D: EncodingSize>(bytes: impl AsRef<[u8]>) -> Result<Barr16<{ D::ENCODED_SIZE }>, Error> {
     let val_step = D::VALUE_STEP;
     let byte_step = D::BYTE_STEP;
     let mask = (1 << D::USIZE) - 1;
 
-    let mut vals = [FieldElement(0u16); ARR_LEN];
+    let mut vals = [0u16; D::ENCODED_SIZE];
 
     let vc = vals.chunks_mut(val_step);
     let bc = bytes.as_ref().chunks(byte_step);
@@ -57,7 +57,7 @@ pub(crate) fn byte_decode<D: EncodingSize>(bytes: impl AsRef<[u8]>) -> Result<Va
             if D::USIZE == 12 {
                 vj %= FieldElement::Q;
             }
-            v[j] = FieldElement(vj);
+            v[j] = vj;
         }
     }
 

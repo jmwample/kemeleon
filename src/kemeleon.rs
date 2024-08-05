@@ -1,4 +1,4 @@
-use crate::{fips, Barr, EncodingSize, FieldElement, Transcode, ValueArray, ARR_LEN};
+use crate::{fips, Barr8, EncodingSize, FieldElement, Transcode, ARR_LEN};
 
 use core::marker::PhantomData;
 use std::io::{Error as IoError, Write};
@@ -38,7 +38,7 @@ where
     [(); <P as EncodingSize>::ENCODED_SIZE ]:,
 {
     type EK = Self;
-    type ET = Barr<{ <P as EncodingSize>::ENCODED_SIZE }>;
+    type ET = Barr8<{ <P as EncodingSize>::ENCODED_SIZE }>;
     type Error = IoError;
 
     /// In this formulation a is 1 indexed (as oposed to being 0 indexed)
@@ -57,7 +57,7 @@ where
     fn as_bytes(&self) -> Self::ET {
 
         // let mut dst = <Self as Encode>::ET::default();
-        let mut dst: Barr::<{<P as EncodingSize>::ENCODED_SIZE}> = [0u8; <P as EncodingSize>::ENCODED_SIZE];
+        let mut dst = [0u8; <P as EncodingSize>::ENCODED_SIZE];
         self.encode_priv(&mut dst);
 
         todo!("key as bytes implementation incomplete")
@@ -73,11 +73,12 @@ where
     ///     4 return a
     /// ```
     fn try_from_bytes(c: impl AsRef<[u8]>) -> Result<Self::EK, Self::Error> {
-        #[allow(deprecated)] // I don't understand what they want for the TryFrom format.
-        let ek_bytes = Encoded::<<P as KemCore>::EncapsulationKey>::from_slice(c.as_ref());
-        let key = <P as KemCore>::EncapsulationKey::from_bytes(ek_bytes);
+        EncapsulationKey::<P>::decode(c.as_ref())
+        // #[allow(deprecated)] // I don't understand what they want for the TryFrom format.
+        // let ek_bytes = Encoded::<<P as KemCore>::EncapsulationKey>::from_slice(c.as_ref());
+        // let key = <P as KemCore>::EncapsulationKey::from_bytes(ek_bytes);
 
-        Ok(EncapsulationKey { key, byte: 0x00 })
+        // Ok(EncapsulationKey { key, byte: 0x00 })
     }
 }
 
@@ -87,40 +88,38 @@ where
     [(); <P as EncodingSize>::ENCODED_SIZE ]:,
 {
     fn satisfies_sampling(&self) -> bool {
-        // TODO: Example of current incongruity -> encode_priv takes byte array as ValueArray
-        // but we have an EncapsulationKey. So what to encode?
-        // let mut dst = <Self as Encode>::ET::default();
-        let mut dst: Barr::<{<P as EncodingSize>::ENCODED_SIZE}> = [0u8; <P as EncodingSize>::ENCODED_SIZE];
+        let mut dst = [0u8; <P as EncodingSize>::ENCODED_SIZE];
         self.encode_priv(&mut dst)
     }
 }
 
 impl<P> EncapsulationKey<P>
-where 
+where
     P: KemCore + EncodingSize,
+    [(); <P as EncodingSize>::ENCODED_SIZE ]:,
 {
 
     fn decode(c: impl AsRef<[u8]>) -> Result<Self, IoError>
     where
         P: KemCore + EncodingSize,
     {
-        // if c.as_ref().len() < ValueArray::LENGTH * 2 {
-        //     return Err(Error::other("incorrect length"));
-        // }
+        if c.as_ref().len() < <P as EncodingSize>::ENCODED_SIZE {
+            return Err(IoError::other("incorrect length"));
+        }
 
         let base = BigUint::from(FieldElement::Q);
         let r = BigUint::from_bytes_le(c.as_ref());
 
-        let mut out = [FieldElement(0u16); ARR_LEN];
+        let mut out = [0u16; ARR_LEN];
         let mut scratch: BigUint;
         for i in 0..ARR_LEN {
             scratch = BigUint::ZERO;
             let pk_i = ((&r - &scratch) / base.pow(i as u32)) % FieldElement::Q;
             scratch += &pk_i;
-            out[i] = FieldElement(pk_i.to_u32_digits()[0] as u16);
+            out[i] = pk_i.to_u32_digits()[0] as u16;
         }
 
-        let bytes = fips::byte_encode::<P>(&out);
+        let bytes = fips::byte_encode::<P, ARR_LEN>(&out);
 
         #[allow(deprecated)] // I don't understand what they want for the TryFrom format.
         let ek_bytes = Encoded::<<P as KemCore>::EncapsulationKey>::from_slice(&bytes);
@@ -138,7 +137,7 @@ where
         let vals = fips::byte_decode::<P>(vals_fips_encoded).unwrap();
 
         for (i, x) in vals.iter().enumerate() {
-            let bigx = BigUint::from(x.0);
+            let bigx = BigUint::from(*x);
             out += bigx * base.pow(i as u32);
         }
 
@@ -182,10 +181,6 @@ where
     }
 }
 
-// fn encode_ctxt_priv<P: EncodingSize>(_p: &ValueArray) -> Vec<u8> {
-//     vec![]
-// }
-// 
 // fn decode_ctxt_priv<P>(
 //     c: impl AsRef<[u8]>,
 //     dst: impl Write,
@@ -196,29 +191,29 @@ where
 //     let idx_r1 = P::DV * ARR_LEN;
 //     let r1 = &c.as_ref()[..c.as_ref().len() - idx_r1];
 //     let r2 = &c.as_ref()[idx_r1..];
-// 
+//
 //     let u = decode::<P>(r2).map_err(|e| IoError::other("error occured while decoding"))?;
 //     let c1 = compress(Into::<[u16; ARR_LEN]>::into(u), P::DU);
 //     let ctxt: Vec<u8> = c1.iter().zip(r2).map(|(v1, v2)| v1 | v2).collect();
-// 
+//
 //     #[allow(deprecated)]
 //     Ok(*Ciphertext::<P>::from_slice(&ctxt))
 // }
-// 
+//
 // const QFD: f64 = 4096.0 / 3329.0;
 // const DFQ: f64 = 3329.0 / 4096.0;
-// 
+//
 // /// x −→ ⌈((2^d)/q)· x⌋
 // fn compress(u: impl AsRef<[u16]>, _du: usize) -> Vec<u16> {
 //     u.as_ref().iter().map(|v| (*v as f64 * QFD + 0.5) as u16).collect()
 // }
-// 
+//
 // /// y −→ ⌈(q/(2^d))· y⌋
-// 
+//
 // fn decompress(c: impl AsRef<[u16]>, _du: usize) -> Vec<u16> {
 //     c.as_ref().iter().map(|v| (*v as f64 * DFQ + 0.5) as u16).collect()
 // }
-// 
+
 // ========================================================================== //
 // Tests
 // ========================================================================== //
@@ -241,7 +236,7 @@ mod tests {
         let (_dk, ek) = Kemx::<P>::generate(&mut rng).expect("failed generation");
 
         // let mut dst: <P as EncodingSize>::EncodedKeyType;
-        let mut dst: Barr::<{<P as EncodingSize>::ENCODED_SIZE}> = [0u8; <P as EncodingSize>::ENCODED_SIZE];
+        let mut dst = [0u8; <P as EncodingSize>::ENCODED_SIZE];
         _ = ek.encode_priv(&mut dst);
 
         // Encapsulation Key decoded from bytes sent over the wire.
