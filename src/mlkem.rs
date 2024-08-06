@@ -1,7 +1,7 @@
 use core::fmt::Debug;
 use std::{io::Error as IoError, marker::PhantomData};
 
-use crate::{kemeleon::KemeleonEk, EncodingSize, Transcode};
+use crate::{kemeleon::Encodable, EncodingSize, Transcode};
 
 use kem::{Decapsulate, Encapsulate};
 use ml_kem::{Ciphertext, KemCore, SharedKey};
@@ -27,21 +27,19 @@ where
     [(); <P as EncodingSize>::ENCODED_SIZE]:,
     [(); <P as EncodingSize>::K]:,
 {
-    pub fn generate(
-        rng: &mut impl CryptoRngCore,
-    ) -> Result<(KDecapsulationKey<P>, KEncapsulationKey<P>), IoError> {
+    pub fn generate(rng: &mut impl CryptoRngCore) -> (KDecapsulationKey<P>, KEncapsulationKey<P>) {
         // random u8 for the most significant byte which will be less than 8 bits.
         let msb_rand = rng.next_u32() as u8;
 
         for _ in 0..MAX_RETRIES {
             let (dk, ek) = P::generate(rng);
-            let kek = KEncapsulationKey::<P> {
+            let encap_key = KEncapsulationKey::<P> {
                 key: ek,
                 byte: msb_rand,
             };
-            if kek.satisfies_sampling() {
-                let kdk = KDecapsulationKey::<P>(dk);
-                return Ok((kdk, kek));
+            if encap_key.satisfies_sampling() {
+                let decap_key = KDecapsulationKey::<P>(dk);
+                return (decap_key, encap_key);
             }
 
             continue;
@@ -175,14 +173,14 @@ mod test {
 
     use ml_kem::{Encoded, EncodedSizeUser, KemCore, MlKem1024, MlKem512, MlKem768};
 
-    fn generate_trial<P: KemCore + EncodingSize>()
+    fn generate_trial<P>()
     where
         P: ml_kem::KemCore + EncodingSize,
         [(); <P as EncodingSize>::ENCODED_SIZE]:,
         [(); <P as EncodingSize>::K]:,
     {
         let mut rng = rand::thread_rng();
-        let (dk, ek) = Kemx::<P>::generate(&mut rng).expect("keygen failed");
+        let (dk, ek) = Kemx::<P>::generate(&mut rng);
 
         let ek_encoded: Vec<u8> = ek.as_bytes().to_vec();
 

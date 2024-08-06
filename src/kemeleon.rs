@@ -11,7 +11,7 @@ pub use crate::mlkem::EncodedCiphertext;
 pub use crate::mlkem::KEncapsulationKey as EncapsulationKey;
 
 pub trait Encode {
-    /// EncapsulationKey
+    /// Encapsulation Key Type
     type EK;
     /// Encoded type (i.e Encoded Encapsulation Key, or Encoded Ciphertext)
     type ET;
@@ -21,6 +21,11 @@ pub trait Encode {
 
     fn as_bytes(&self) -> Self::ET;
 
+    /// Try to parse from bytes
+    ///
+    /// # Errors
+    /// - length error: input ciphertext is the wrong size
+    ///
     fn try_from_bytes(c: impl AsRef<[u8]>) -> Result<Self::EK, Self::Error>;
 }
 
@@ -28,7 +33,7 @@ pub trait Encode {
 // Encapsulation Key
 // ========================================================================== //
 
-pub trait KemeleonEk: Encode {
+pub trait Encodable: Encode {
     fn satisfies_sampling(&self) -> bool;
 }
 
@@ -83,7 +88,7 @@ where
     }
 }
 
-impl<P> KemeleonEk for EncapsulationKey<P>
+impl<P> Encodable for EncapsulationKey<P>
 where
     P: KemCore + EncodingSize,
     [(); <P as EncodingSize>::ENCODED_SIZE]:,
@@ -149,8 +154,7 @@ where
         let base = BigUint::from(FieldElement::Q);
 
         let vals_fips_encoded = self.key.as_bytes().to_vec();
-        // can never fail since the format is guaranteed correct by the ml_kem library
-        let (rho, vals) = fips::byte_decode::<P>(vals_fips_encoded).unwrap();
+        let (rho, vals) = fips::byte_decode::<P>(vals_fips_encoded);
 
         k[..RHO_LEN].copy_from_slice(&rho[..]);
 
@@ -253,7 +257,7 @@ mod tests {
         let mut rng = rand::thread_rng();
         // This is the repeated trial generate from random and any key created
         // is guaranteed to be representable, otherwise it would have panicked
-        let (_dk, ek) = Kemx::<P>::generate(&mut rng).expect("failed generation");
+        let (_dk, ek) = Kemx::<P>::generate(&mut rng);
 
         // let mut dst: <P as EncodingSize>::EncodedKeyType;
         let mut dst = [0u8; <P as EncodingSize>::ENCODED_SIZE];

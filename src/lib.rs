@@ -1,3 +1,11 @@
+// #![no_std]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![warn(clippy::pedantic)] // Be pedantic by default
+#![warn(clippy::integer_division_remainder_used)] // Be judicious about using `/` and `%`
+#![allow(clippy::cast_possible_truncation)]
+// do not warn about downcasting
+// #![deny(missing_docs)] // Require all public interfaces to be documented
+
 //! Implementation of Kemeleon Encodings
 //!
 //! [Paper](https://eprint.iacr.org/2024/1086.pdf).
@@ -150,8 +158,8 @@ impl EncodingSize for ml_kem::MlKem512 {
     const K: usize = 2;
 
     const ENCODED_SIZE: usize = RHO_LEN + 749;
-    const MSB_BITMASK: u8 = 0b00011111;
-    const MSB_BITMASK_INV: u8 = 0b11100000;
+    const MSB_BITMASK: u8 = 0b0001_1111;
+    const MSB_BITMASK_INV: u8 = 0b1110_0000;
     const HIGH_ORDER_BIT: u64 = 5991;
 
     const ETA1: usize = 3;
@@ -164,8 +172,8 @@ impl EncodingSize for ml_kem::MlKem768 {
     const K: usize = 3;
 
     const ENCODED_SIZE: usize = RHO_LEN + 1124;
-    const MSB_BITMASK: u8 = 0b00011111;
-    const MSB_BITMASK_INV: u8 = 0b11100000;
+    const MSB_BITMASK: u8 = 0b0001_1111;
+    const MSB_BITMASK_INV: u8 = 0b1110_0000;
     const HIGH_ORDER_BIT: u64 = 8987;
 
     const ETA1: usize = 2;
@@ -178,8 +186,8 @@ impl EncodingSize for ml_kem::MlKem1024 {
     const K: usize = 4;
 
     const ENCODED_SIZE: usize = RHO_LEN + 1498;
-    const MSB_BITMASK: u8 = 0b00011111;
-    const MSB_BITMASK_INV: u8 = 0b11100000;
+    const MSB_BITMASK: u8 = 0b0001_1111;
+    const MSB_BITMASK_INV: u8 = 0b1110_0000;
     const HIGH_ORDER_BIT: u64 = 11982;
 
     const ETA1: usize = 2;
@@ -187,6 +195,8 @@ impl EncodingSize for ml_kem::MlKem1024 {
     const DU: usize = 11;
     const DV: usize = 5;
 }
+
+// TODO: check msb bit masks and inversion for each type ^^.
 
 // ========================================================================== //
 // Public Interface objects
