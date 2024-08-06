@@ -24,6 +24,7 @@ where
 impl<P> Kemx<P>
 where
     P: ml_kem::KemCore + EncodingSize,
+    [(); <P as EncodingSize>::UNENCODED_SIZE]:,
     [(); <P as EncodingSize>::ENCODED_SIZE]:,
     [(); <P as EncodingSize>::K]:,
 {
@@ -176,6 +177,7 @@ mod test {
     fn generate_trial<P>()
     where
         P: ml_kem::KemCore + EncodingSize,
+        [(); <P as EncodingSize>::UNENCODED_SIZE]:,
         [(); <P as EncodingSize>::ENCODED_SIZE]:,
         [(); <P as EncodingSize>::K]:,
     {
@@ -184,6 +186,7 @@ mod test {
 
         let ek_encoded: Vec<u8> = ek.as_bytes().to_vec();
 
+        // TODO: causing TryFromSlice Error
         let ek_bytes = Encoded::<<P as KemCore>::EncapsulationKey>::try_from(&ek_encoded[..])
             .expect("failed to create hybrid_array::Array");
         let ek_decoded = <P as KemCore>::EncapsulationKey::from_bytes(&ek_bytes);

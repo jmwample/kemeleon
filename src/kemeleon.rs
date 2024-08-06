@@ -40,6 +40,7 @@ pub trait Encodable: Encode {
 impl<P> Encode for EncapsulationKey<P>
 where
     P: KemCore + EncodingSize,
+    [(); <P as EncodingSize>::UNENCODED_SIZE]:,
     [(); <P as EncodingSize>::ENCODED_SIZE]:,
     [(); <P as EncodingSize>::K]:,
 {
@@ -66,7 +67,8 @@ where
         // so we do not need the result.
         let _ = self.encode_priv(&mut dst);
 
-        todo!("key as bytes implementation incomplete")
+        dst
+        // todo!("key as bytes implementation incomplete")
     }
 
     /// Kemeleon.Decode(𝑟):
@@ -91,6 +93,7 @@ where
 impl<P> Encodable for EncapsulationKey<P>
 where
     P: KemCore + EncodingSize,
+    [(); <P as EncodingSize>::UNENCODED_SIZE]:,
     [(); <P as EncodingSize>::ENCODED_SIZE]:,
     [(); <P as EncodingSize>::K]:,
 {
@@ -103,6 +106,7 @@ where
 impl<P> EncapsulationKey<P>
 where
     P: KemCore + EncodingSize,
+    [(); <P as EncodingSize>::UNENCODED_SIZE]:,
     [(); <P as EncodingSize>::ENCODED_SIZE]:,
     [(); <P as EncodingSize>::K]:,
 {
@@ -126,6 +130,7 @@ where
             scratch = BigUint::ZERO;
             let pk_i = ((&r - &scratch) / base.pow(i as u32)) % FieldElement::Q;
             scratch += &pk_i;
+            // TODO: causing Index out of bounds error
             *val = pk_i.to_u32_digits()[0] as u16;
         }
 
@@ -251,6 +256,7 @@ mod tests {
     fn encode_decode_trial<P>()
     where
         P: KemCore + EncodingSize,
+        [(); <P as EncodingSize>::UNENCODED_SIZE]:,
         [(); <P as EncodingSize>::ENCODED_SIZE]:,
         [(); <P as EncodingSize>::K]:,
     {
