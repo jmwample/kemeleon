@@ -2,7 +2,7 @@
 //!
 //! This code was drawn almost directly from the [`ml-kem`](https://docs.rs/ml-kem) crate.
 
-use crate::{Barr16, EncodingSize, FieldElement, ARR_LEN};
+use crate::{EncodingSize, FieldElement, NttArray, ARR_LEN, RHO_LEN};
 use std::io::Error;
 
 // ========================================================================== //
@@ -12,14 +12,18 @@ use std::io::Error;
 // Algorithm 4 ByteEncode_d(F)
 //
 // Note: This algorithm performs compression as well as encoding.
-pub(crate) fn byte_encode<D: EncodingSize, const N: usize>(vals: &Barr16<N>) -> Vec<u8> {
+pub(crate) fn byte_encode<D: EncodingSize>(
+    rho: &[u8; 32],
+    ntt_vals: &NttArray<{ D::K }>,
+) -> Vec<u8> {
     let val_step = D::VALUE_STEP;
     let byte_step = D::BYTE_STEP;
 
     let mut bytes = Vec::with_capacity(D::ENCODED_SIZE);
+    bytes[..RHO_LEN].copy_from_slice(&rho[..]);
 
-    let vc = vals.chunks(val_step);
-    let bc = bytes.chunks_mut(byte_step);
+    let vc = ntt_vals.as_flattened().chunks(val_step);
+    let bc = bytes[RHO_LEN..].chunks_mut(byte_step);
     for (v, b) in vc.zip(bc) {
         let mut x = 0u128;
         for (j, vj) in v.iter().enumerate() {
@@ -38,14 +42,14 @@ pub(crate) fn byte_encode<D: EncodingSize, const N: usize>(vals: &Barr16<N>) -> 
 // Note: This function performs decompression as well as decoding.
 pub(crate) fn byte_decode<D: EncodingSize>(
     bytes: impl AsRef<[u8]>,
-) -> Result<Barr16<{ D::ENCODED_SIZE }>, Error> {
+) -> Result<([u8; 32], NttArray<{ D::K }>), Error> {
     let val_step = D::VALUE_STEP;
     let byte_step = D::BYTE_STEP;
     let mask = (1 << D::USIZE) - 1;
 
-    let mut vals = [0u16; D::ENCODED_SIZE];
+    let mut vals = [[0u16; ARR_LEN]; D::K];
 
-    let vc = vals.chunks_mut(val_step);
+    let vc = vals.as_flattened_mut().chunks_mut(val_step);
     let bc = bytes.as_ref().chunks(byte_step);
     for (v, b) in vc.zip(bc) {
         let mut xb = [0u8; 16];
@@ -63,15 +67,16 @@ pub(crate) fn byte_decode<D: EncodingSize>(
         }
     }
 
-    Ok(vals)
+    // TODO: decode rho
+    Ok(([0u8; 32], vals))
 }
 
 #[cfg(test)]
 mod tests {
-    use kem::{Encapsulate, Decapsulate};
-    use ml_kem::{KemCore, MlKem512, MlKem768, MlKem1024, RawBytes};
+    use kem::{Decapsulate, Encapsulate};
+    use ml_kem::{KemCore, MlKem1024, MlKem512, MlKem768, RawBytes};
 
-    fn try_raw<P:KemCore>() {
+    fn try_raw<P: KemCore>() {
         let mut rng = rand::thread_rng();
         let (dk, ek) = P::generate(&mut rng);
 

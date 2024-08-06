@@ -1,9 +1,9 @@
+use crate::RHO_LEN;
 use crate::{fips, Barr8, EncodingSize, FieldElement, Transcode, ARR_LEN};
 
 use core::marker::PhantomData;
-use std::io::{Error as IoError, Write};
+use std::io::Error as IoError;
 
-use ml_kem::Ciphertext;
 use ml_kem::{Encoded, EncodedSizeUser, KemCore};
 use num_bigint::BigUint;
 
@@ -35,7 +35,8 @@ pub trait KemeleonEk: Encode {
 impl<P> Encode for EncapsulationKey<P>
 where
     P: KemCore + EncodingSize,
-    [(); <P as EncodingSize>::ENCODED_SIZE ]:,
+    [(); <P as EncodingSize>::ENCODED_SIZE]:,
+    [(); <P as EncodingSize>::K]:,
 {
     type EK = Self;
     type ET = Barr8<{ <P as EncodingSize>::ENCODED_SIZE }>;
@@ -55,10 +56,10 @@ where
     /// resulting in a single larger integer whose intermediary bits are no longer
     /// biased.
     fn as_bytes(&self) -> Self::ET {
-
-        // let mut dst = <Self as Encode>::ET::default();
         let mut dst = [0u8; <P as EncodingSize>::ENCODED_SIZE];
-        self.encode_priv(&mut dst);
+        // we know there will be no size error and we know the key will be encodable
+        // so we do not need the result.
+        let _ = self.encode_priv(&mut dst);
 
         todo!("key as bytes implementation incomplete")
     }
@@ -85,20 +86,21 @@ where
 impl<P> KemeleonEk for EncapsulationKey<P>
 where
     P: KemCore + EncodingSize,
-    [(); <P as EncodingSize>::ENCODED_SIZE ]:,
+    [(); <P as EncodingSize>::ENCODED_SIZE]:,
+    [(); <P as EncodingSize>::K]:,
 {
     fn satisfies_sampling(&self) -> bool {
         let mut dst = [0u8; <P as EncodingSize>::ENCODED_SIZE];
-        self.encode_priv(&mut dst)
+        self.encode_priv(&mut dst).expect("should never fail")
     }
 }
 
 impl<P> EncapsulationKey<P>
 where
     P: KemCore + EncodingSize,
-    [(); <P as EncodingSize>::ENCODED_SIZE ]:,
+    [(); <P as EncodingSize>::ENCODED_SIZE]:,
+    [(); <P as EncodingSize>::K]:,
 {
-
     fn decode(c: impl AsRef<[u8]>) -> Result<Self, IoError>
     where
         P: KemCore + EncodingSize,
@@ -107,44 +109,62 @@ where
             return Err(IoError::other("incorrect length"));
         }
 
-        let base = BigUint::from(FieldElement::Q);
-        let r = BigUint::from_bytes_le(c.as_ref());
+        let mut rho = [0u8; RHO_LEN];
+        rho[..].clone_from_slice(&c.as_ref()[..RHO_LEN]);
 
-        let mut out = [0u16; ARR_LEN];
+        let base = BigUint::from(FieldElement::Q);
+        let r = BigUint::from_bytes_le(&c.as_ref()[RHO_LEN..]);
+
+        let mut vals = [[0u16; ARR_LEN]; P::K];
         let mut scratch: BigUint;
-        for i in 0..ARR_LEN {
+        for (i, val) in vals.as_flattened_mut().iter_mut().enumerate() {
             scratch = BigUint::ZERO;
             let pk_i = ((&r - &scratch) / base.pow(i as u32)) % FieldElement::Q;
             scratch += &pk_i;
-            out[i] = pk_i.to_u32_digits()[0] as u16;
+            *val = pk_i.to_u32_digits()[0] as u16;
         }
 
-        let bytes = fips::byte_encode::<P, ARR_LEN>(&out);
+        let bytes = fips::byte_encode::<P>(&rho, &vals);
 
         #[allow(deprecated)] // I don't understand what they want for the TryFrom format.
-        let ek_bytes = Encoded::<<P as KemCore>::EncapsulationKey>::from_slice(&bytes);
-        let key = <P as KemCore>::EncapsulationKey::from_bytes(ek_bytes);
+        // rho: B32::try_from(&r[..]).expect("should be impossible")
+        let ek_bytes =
+            Encoded::<<P as KemCore>::EncapsulationKey>::try_from(&bytes[..]).map_err(|e| {
+                IoError::other(format!("failed to convert to hybrid_array::Array: {e}"))
+            })?;
+        let key = <P as KemCore>::EncapsulationKey::from_bytes(&ek_bytes);
         Ok(EncapsulationKey::from_fips(key))
     }
 
-    fn encode_priv(&self, mut dst: impl AsMut<[u8]>) -> bool {
+    fn encode_priv(&self, mut dst: impl AsMut<[u8]>) -> Result<bool, IoError> {
         let k = dst.as_mut();
+        if k.len() < P::ENCODED_SIZE {
+            return Err(IoError::other(format!(
+                "invalid dst array size. {} != {}",
+                P::ENCODED_SIZE,
+                k.len()
+            )));
+        }
         let mut out = BigUint::ZERO;
         let base = BigUint::from(FieldElement::Q);
 
         let vals_fips_encoded = self.key.as_bytes().to_vec();
         // can never fail since the format is guaranteed correct by the ml_kem library
-        let vals = fips::byte_decode::<P>(vals_fips_encoded).unwrap();
+        let (rho, vals) = fips::byte_decode::<P>(vals_fips_encoded).unwrap();
+
+        k[..RHO_LEN].copy_from_slice(&rho[..]);
 
         for (i, x) in vals.iter().enumerate() {
-            let bigx = BigUint::from(*x);
-            out += bigx * base.pow(i as u32);
+            for (j, val) in x.iter().enumerate() {
+                let bigx = BigUint::from(*val);
+                out += bigx * base.pow((i * vals.len() + j) as u32);
+            }
         }
 
-        k[<P as EncodingSize>::ENCODED_SIZE-1] &= self.byte & <P as EncodingSize>::MSB_BITMASK;
+        k[<P as EncodingSize>::ENCODED_SIZE - 1] &= self.byte & <P as EncodingSize>::MSB_BITMASK;
 
         // (out.to_bytes_le(), !out.bit(2996))
-        !out.bit(2996)
+        Ok(!out.bit(2996))
     }
 }
 
@@ -155,12 +175,13 @@ where
 impl<P> Encode for EncodedCiphertext<P>
 where
     P: KemCore + EncodingSize,
+    [(); <P as EncodingSize>::K * RHO_LEN]:,
 {
     /// Encapsulation Key
     type EK = Self;
 
     /// Encoded Cuphertext Type
-    type ET = <P as EncodingSize>::EncodedCiphertextType;
+    type ET = Barr8<{ P::K * RHO_LEN }>;
 
     /// Error Type returned on failed decode
     type Error = IoError;
@@ -222,13 +243,12 @@ where
 mod tests {
     use super::*;
     use crate::mlkem::Kemx;
-    use core::fmt::Debug;
 
     fn encode_decode_trial<P>()
     where
         P: KemCore + EncodingSize,
-        <P as KemCore>::EncapsulationKey: Debug,
-        [(); <P as EncodingSize>::ENCODED_SIZE ]:,
+        [(); <P as EncodingSize>::ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::K]:,
     {
         let mut rng = rand::thread_rng();
         // This is the repeated trial generate from random and any key created
@@ -237,7 +257,7 @@ mod tests {
 
         // let mut dst: <P as EncodingSize>::EncodedKeyType;
         let mut dst = [0u8; <P as EncodingSize>::ENCODED_SIZE];
-        _ = ek.encode_priv(&mut dst);
+        _ = ek.encode_priv(&mut dst).expect("failed kemeleon encode");
 
         // Encapsulation Key decoded from bytes sent over the wire.
         let recv_ek = EncapsulationKey::<P>::decode(dst).expect("failed decode");

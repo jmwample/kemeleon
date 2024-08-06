@@ -86,6 +86,13 @@ impl From<u16> for FieldElement {
 }
 
 const ARR_LEN: usize = 256;
+const RHO_LEN: usize = 32;
+
+/// byte array
+type Barr8<const N: usize> = [u8; N];
+/// value array -- array of polynomial values
+type ValueArray<const N: usize, const K: usize> = [[u16; N]; K];
+type NttArray<const K: usize> = ValueArray<ARR_LEN, K>;
 
 #[allow(dead_code)]
 impl FieldElement {
@@ -110,9 +117,6 @@ pub trait Transcode {
 // ========================================================================== //
 
 pub trait EncodingSize {
-    type EncodedKeyType: AsRef<[u8]> + AsMut<[u8]>;
-    type EncodedCiphertextType: AsRef<[u8]> + AsMut<[u8]>;
-
     /// Number of bits used to represent field elements
     const USIZE: usize = 12;
 
@@ -121,6 +125,8 @@ pub trait EncodingSize {
 
     /// Number of field elements per equation.
     const K: usize;
+    /// Number of bytes required to represent the object when not encoded
+    const UNENCODED_SIZE: usize = RHO_LEN + ARR_LEN * Self::K;
 
     /// Bitwise Index of the high order bit when computing the kemeleon byte
     /// representation. Computed as $\left\lceil log_{2}(q^{n\cdot k}+1) \right\rceil$
@@ -140,24 +146,10 @@ pub trait EncodingSize {
     const DV: usize;
 }
 
-trait EncodedTypes {
-    type EncodedKeyType;
-    type EncodedCiphertextType;
-}
-
-/// byte array
-type Barr8<const N: usize> = [u8; N];
-/// Nibble array
-type Barr16<const N: usize> = [u16; N];
-
 impl EncodingSize for ml_kem::MlKem512 {
-    // type EncodedKeyType = Barr<Self::ENCODED_SIZE>;
-    type EncodedKeyType = [u8; 749];
-    type EncodedCiphertextType = [u8; 1498];
-
     const K: usize = 2;
 
-    const ENCODED_SIZE: usize = 749;
+    const ENCODED_SIZE: usize = RHO_LEN + 749;
     const MSB_BITMASK: u8 = 0b00011111;
     const MSB_BITMASK_INV: u8 = 0b11100000;
     const HIGH_ORDER_BIT: u64 = 5991;
@@ -169,12 +161,9 @@ impl EncodingSize for ml_kem::MlKem512 {
 }
 
 impl EncodingSize for ml_kem::MlKem768 {
-    type EncodedKeyType = [u8; 1124];
-    type EncodedCiphertextType = [u8; 1498];
-
     const K: usize = 3;
 
-    const ENCODED_SIZE: usize = 1124;
+    const ENCODED_SIZE: usize = RHO_LEN + 1124;
     const MSB_BITMASK: u8 = 0b00011111;
     const MSB_BITMASK_INV: u8 = 0b11100000;
     const HIGH_ORDER_BIT: u64 = 8987;
@@ -186,12 +175,9 @@ impl EncodingSize for ml_kem::MlKem768 {
 }
 
 impl EncodingSize for ml_kem::MlKem1024 {
-    type EncodedKeyType = [u8; 1498];
-    type EncodedCiphertextType = [u8; 1498];
-
     const K: usize = 4;
 
-    const ENCODED_SIZE: usize = 1498;
+    const ENCODED_SIZE: usize = RHO_LEN + 1498;
     const MSB_BITMASK: u8 = 0b00011111;
     const MSB_BITMASK_INV: u8 = 0b11100000;
     const HIGH_ORDER_BIT: u64 = 11982;
@@ -214,4 +200,3 @@ pub type MlKem768 = mlkem::Kemx<ml_kem::MlKem768>;
 
 /// ML-KEM with the parameter set for security category 5, corresponding to key search on a block cipher with a 256-bit key.
 pub type MlKem1024 = mlkem::Kemx<ml_kem::MlKem1024>;
-
