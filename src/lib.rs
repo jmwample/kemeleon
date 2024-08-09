@@ -133,14 +133,10 @@ pub trait EncodingSize {
 
     /// Number of field elements per equation.
     const K: usize;
-    /// Number of bytes required to represent the object when not encoded
-    const UNENCODED_SIZE: usize = RHO_LEN + ARR_LEN * Self::K;
 
     /// Bitwise Index of the high order bit when computing the kemeleon byte
     /// representation. Computed as $\left\lceil log_{2}(q^{n\cdot k}+1) \right\rceil$
     const HIGH_ORDER_BIT: u64;
-    /// Size of the Kemeleon encoded string as bytes. $\left\lceil (HIGH\_ORDER\_BIT -1)/8 \right\rceil$
-    const ENCODED_SIZE: usize;
     /// Bitmask for the high order byte which will be less than a full byte of
     /// random bits when encoded. $(HIGH\_ORDER\_BIT -1)\ mod\ 8$
     const MSB_BITMASK: u8;
@@ -152,6 +148,14 @@ pub trait EncodingSize {
     const ETA2: usize;
     const DU: usize;
     const DV: usize;
+
+    /// Size of the Kemeleon encoded string as bytes. $\left\lceil (HIGH\_ORDER\_BIT -1)/8 \right\rceil$
+    const ENCODED_SIZE: usize;
+    /// Number of bytes required to represent the object when not encoded
+    const UNENCODED_SIZE: usize = RHO_LEN + ARR_LEN * Self::K;
+
+    /// Number of bytes required to represent the FIPS encoded Encapsulation Key
+    const FIPS_ENCODED_SIZE: usize = RHO_LEN + Self::K * 12 * 32;
 }
 
 impl EncodingSize for ml_kem::MlKem512 {

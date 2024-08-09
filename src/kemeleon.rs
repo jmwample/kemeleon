@@ -40,7 +40,7 @@ pub trait Encodable: Encode {
 impl<P> Encode for EncapsulationKey<P>
 where
     P: KemCore + EncodingSize,
-    [(); <P as EncodingSize>::UNENCODED_SIZE]:,
+    [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
     [(); <P as EncodingSize>::ENCODED_SIZE]:,
     [(); <P as EncodingSize>::K]:,
 {
@@ -93,7 +93,7 @@ where
 impl<P> Encodable for EncapsulationKey<P>
 where
     P: KemCore + EncodingSize,
-    [(); <P as EncodingSize>::UNENCODED_SIZE]:,
+    [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
     [(); <P as EncodingSize>::ENCODED_SIZE]:,
     [(); <P as EncodingSize>::K]:,
 {
@@ -106,7 +106,7 @@ where
 impl<P> EncapsulationKey<P>
 where
     P: KemCore + EncodingSize,
-    [(); <P as EncodingSize>::UNENCODED_SIZE]:,
+    [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
     [(); <P as EncodingSize>::ENCODED_SIZE]:,
     [(); <P as EncodingSize>::K]:,
 {
@@ -256,7 +256,7 @@ mod tests {
     fn encode_decode_trial<P>()
     where
         P: KemCore + EncodingSize,
-        [(); <P as EncodingSize>::UNENCODED_SIZE]:,
+        [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
         [(); <P as EncodingSize>::ENCODED_SIZE]:,
         [(); <P as EncodingSize>::K]:,
     {

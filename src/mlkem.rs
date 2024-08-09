@@ -24,7 +24,7 @@ where
 impl<P> Kemx<P>
 where
     P: ml_kem::KemCore + EncodingSize,
-    [(); <P as EncodingSize>::UNENCODED_SIZE]:,
+    [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
     [(); <P as EncodingSize>::ENCODED_SIZE]:,
     [(); <P as EncodingSize>::K]:,
 {
@@ -177,7 +177,7 @@ mod test {
     fn generate_trial<P>()
     where
         P: ml_kem::KemCore + EncodingSize,
-        [(); <P as EncodingSize>::UNENCODED_SIZE]:,
+        [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
         [(); <P as EncodingSize>::ENCODED_SIZE]:,
         [(); <P as EncodingSize>::K]:,
     {
