@@ -1,6 +1,7 @@
 use crate::RHO_LEN;
 use crate::{fips, Barr8, EncodingSize, FieldElement, Transcode, ARR_LEN};
 
+use core::cmp::min;
 use core::marker::PhantomData;
 use std::io::Error as IoError;
 
@@ -82,11 +83,6 @@ where
     /// ```
     fn try_from_bytes(c: impl AsRef<[u8]>) -> Result<Self::EK, Self::Error> {
         EncapsulationKey::<P>::decode(c.as_ref())
-        // #[allow(deprecated)] // I don't understand what they want for the TryFrom format.
-        // let ek_bytes = Encoded::<<P as KemCore>::EncapsulationKey>::from_slice(c.as_ref());
-        // let key = <P as KemCore>::EncapsulationKey::from_bytes(ek_bytes);
-
-        // Ok(EncapsulationKey { key, byte: 0x00 })
     }
 }
 
@@ -119,10 +115,10 @@ where
         }
 
         let mut rho = [0u8; RHO_LEN];
-        rho[..].clone_from_slice(&c.as_ref()[..RHO_LEN]);
+        rho[..].clone_from_slice(&c.as_ref()[P::ENCODED_SIZE - RHO_LEN..]);
 
         let base = BigUint::from(FieldElement::Q);
-        let r = BigUint::from_bytes_le(&c.as_ref()[RHO_LEN..]);
+        let r = BigUint::from_bytes_le(&c.as_ref()[..P::ENCODED_SIZE - RHO_LEN]);
 
         let mut vals = [[0u16; ARR_LEN]; P::K];
         let mut scratch: BigUint;
@@ -130,14 +126,17 @@ where
             scratch = BigUint::ZERO;
             let pk_i = ((&r - &scratch) / base.pow(i as u32)) % FieldElement::Q;
             scratch += &pk_i;
-            // TODO: causing Index out of bounds error
-            *val = pk_i.to_u32_digits()[0] as u16;
+            let k = pk_i.to_u32_digits();
+            *val = match k.is_empty() {
+                false => k[0] as u16,
+                true => 0u16,
+            }
         }
+
+        // TODO: get the random mask byte from the high order bits
 
         let bytes = fips::byte_encode::<P>(&rho, &vals);
 
-        #[allow(deprecated)] // I don't understand what they want for the TryFrom format.
-        // rho: B32::try_from(&r[..]).expect("should be impossible")
         let ek_bytes =
             Encoded::<<P as KemCore>::EncapsulationKey>::try_from(&bytes[..]).map_err(|e| {
                 IoError::other(format!("failed to convert to hybrid_array::Array: {e}"))
@@ -147,6 +146,7 @@ where
     }
 
     fn encode_priv(&self, mut dst: impl AsMut<[u8]>) -> Result<bool, IoError> {
+        // TODO: do we need to enforce dst length?
         let k = dst.as_mut();
         if k.len() < P::ENCODED_SIZE {
             return Err(IoError::other(format!(
@@ -161,18 +161,24 @@ where
         let vals_fips_encoded = self.key.as_bytes().to_vec();
         let (rho, vals) = fips::byte_decode::<P>(vals_fips_encoded);
 
-        k[..RHO_LEN].copy_from_slice(&rho[..]);
-
         for (i, x) in vals.iter().enumerate() {
             for (j, val) in x.iter().enumerate() {
                 let bigx = BigUint::from(*val);
-                out += bigx * base.pow((i * vals.len() + j) as u32);
+                out += bigx * base.pow((i * x.len() + j) as u32);
             }
         }
 
-        k[<P as EncodingSize>::ENCODED_SIZE - 1] &= self.byte & <P as EncodingSize>::MSB_BITMASK;
+        // write out the bytes of the Encapsulation Key
+        let b = out.to_bytes_le();
+        let l = min(P::ENCODED_SIZE - RHO_LEN, b.len());
+        k[..l].copy_from_slice(&b[..l]);
 
-        // (out.to_bytes_le(), !out.bit(2996))
+        // randomize the high order bits
+        k[P::ENCODED_SIZE - (RHO_LEN + 1)] &= self.byte & <P as EncodingSize>::MSB_BITMASK;
+
+        // append rho
+        k[P::ENCODED_SIZE - RHO_LEN..].copy_from_slice(&rho[..]);
+
         Ok(!out.bit(2996))
     }
 }
@@ -264,6 +270,7 @@ mod tests {
         // This is the repeated trial generate from random and any key created
         // is guaranteed to be representable, otherwise it would have panicked
         let (_dk, ek) = Kemx::<P>::generate(&mut rng);
+        let orig = ek.key.as_bytes().to_vec();
 
         // let mut dst: <P as EncodingSize>::EncodedKeyType;
         let mut dst = [0u8; <P as EncodingSize>::ENCODED_SIZE];
@@ -272,7 +279,11 @@ mod tests {
         // Encapsulation Key decoded from bytes sent over the wire.
         let recv_ek = EncapsulationKey::<P>::decode(dst).expect("failed decode");
 
-        assert_eq!(ek.key, recv_ek.key);
+        assert_eq!(
+            hex::encode(&orig),
+            hex::encode(&recv_ek.as_bytes().to_vec())
+        )
+        // assert_eq!(ek.key, recv_ek.key);
     }
 
     #[test]

@@ -170,7 +170,6 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::kemeleon::Encode;
 
     use ml_kem::{Encoded, EncodedSizeUser, KemCore, MlKem1024, MlKem512, MlKem768};
 
@@ -184,17 +183,19 @@ mod test {
         let mut rng = rand::thread_rng();
         let (dk, ek) = Kemx::<P>::generate(&mut rng);
 
-        let ek_encoded: Vec<u8> = ek.as_bytes().to_vec();
-
-        // TODO: causing TryFromSlice Error
+        // To Fips Encoding and back
+        let ek_encoded: Vec<u8> = ek.key.as_bytes().to_vec();
         let ek_bytes = Encoded::<<P as KemCore>::EncapsulationKey>::try_from(&ek_encoded[..])
             .expect("failed to create hybrid_array::Array");
         let ek_decoded = <P as KemCore>::EncapsulationKey::from_bytes(&ek_bytes);
+        // make sure recovered key matches the original
+        assert_eq!(&ek_decoded, ek.as_fips());
 
+        // encapsulate a secret using the kemeleon Encapsulation key
         let (ct, k_send) = ek.encapsulate(&mut rng).unwrap();
-        assert_eq!(ek_decoded, ek.to_fips());
-
+        // and decapsulate using the kemeleon decapsulation key
         let k_recv = dk.decapsulate(&ct).unwrap();
+        // make sure the shared secret matches
         assert_eq!(k_send, k_recv);
     }
 
