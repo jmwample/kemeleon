@@ -127,10 +127,7 @@ where
             let pk_i = ((&r - &scratch) / base.pow(i as u32)) % FieldElement::Q;
             scratch += &pk_i;
             let k = pk_i.to_u32_digits();
-            *val = match k.is_empty() {
-                false => k[0] as u16,
-                true => 0u16,
-            }
+            *val = if k.is_empty() { 0u16 } else { k[0] as u16 };
         }
 
         // TODO: get the random mask byte from the high order bits
@@ -279,11 +276,7 @@ mod tests {
         // Encapsulation Key decoded from bytes sent over the wire.
         let recv_ek = EncapsulationKey::<P>::decode(dst).expect("failed decode");
 
-        assert_eq!(
-            hex::encode(&orig),
-            hex::encode(&recv_ek.as_bytes().to_vec())
-        )
-        // assert_eq!(ek.key, recv_ek.key);
+        assert_eq!(hex::encode(&orig), hex::encode(recv_ek.as_bytes()));
     }
 
     #[test]

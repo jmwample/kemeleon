@@ -2,25 +2,14 @@
 //!
 //! This code was drawn almost directly from the [`ml-kem`](https://docs.rs/ml-kem) crate.
 //!
+//! This module implements the `byte_encode(f)` and `byte_decode(f)` fips encoding
+//! functions. This can be used to interface with '`ml_kem`' crate by using it's
+//! `Encode` trait then parsing to my own local format before re-encoding to
+//! kemeleon format. The reverse can be done to convert back to '`ml_kem`'.
 //!
+//! This should work for any ML KEM library that implements the FIPS encoding
+//! properly.
 //!
-//! # Strategies
-//!
-//! I have three options for integrating with the ['ml_kem'] crate because none has
-//! emerged as obviously best / easiest.
-//!
-//! 1. Implement my own `byte_encode(f)` and `byte_decode(f)` fips encoding
-//! functions and interface with 'ml_kem' crate by using it's as_bytes() then
-//! parsing to my own local format before re-encoding to kemeleon (and reverse
-//! when decoding back to ml_kem).
-//!
-//! 2. Make changes to the `ml_kem` crate that allow exposing the raw bytes
-//! of the ntt polynomials and rho. Then just access them directly from the key
-//! and build key from the pieces once a key is parsed from kemeleon representation.
-//!
-//! 3. Make a local copy of the key struct and use an unsafe transmute to convert
-//! to my own struct type where I have access to the internal fields. This requires
-//! no changes to the `ml_kem` library, and is used directly like option (2).
 
 use crate::{Barr8, EncodingSize, FieldElement, NttArray, ARR_LEN, RHO_LEN};
 
@@ -128,37 +117,7 @@ mod tests {
     use super::{byte_decode, byte_encode};
     use crate::{EncodingSize, RHO_LEN};
 
-    use kem::{Decapsulate, Encapsulate};
-    use ml_kem::{Encoded, EncodedSizeUser, KemCore, MlKem1024, MlKem512, MlKem768, RawBytes};
-
-    // =================================================
-    //          Strategy 2 (implement FIPs conversion)
-    // =================================================
-
-    fn try_raw<P: KemCore>() {
-        let mut rng = rand::thread_rng();
-        let (dk, ek) = P::generate(&mut rng);
-
-        let (rho, ntt) = <P::EncapsulationKey as RawBytes>::as_raw(&ek);
-
-        let ek = P::EncapsulationKey::from_raw(rho.as_ref(), ntt);
-
-        let (ct, k_send) = ek.encapsulate(&mut rng).unwrap();
-
-        let k_recv = dk.decapsulate(&ct).unwrap();
-        assert_eq!(k_send, k_recv);
-    }
-
-    #[test]
-    fn to_from_raw() {
-        try_raw::<MlKem512>();
-        try_raw::<MlKem768>();
-        try_raw::<MlKem1024>();
-    }
-
-    // =================================================
-    //          Strategy 1 (implement FIPs conversion)
-    // =================================================
+    use ml_kem::{Encoded, EncodedSizeUser, KemCore, MlKem1024, MlKem512, MlKem768};
 
     fn fips_encode_trial<D>()
     where
@@ -204,7 +163,7 @@ mod tests {
     fn fixed_encap_key() {
         let encoded_key = "1d04f737d1811f950ccc2340bff7640bd95ac2350b92ee6a5dcb4ccd05799bd2a25ad5b04a7a90a064387f9f8b6e77c60309a09b0d3307de9c936a91b797906674134fc9fbb5f1b450d5daa7ddc74c26d43aa8b351b4673f6bc32d89f460666475a28765ce722b42e682941b04635371a5234f6b168142c3366ce6bbd24a52a644619856c4303b0292227e9ae16ccaf33fc4f1a9fb537294b0261f7b1ca6ea14fa02bb12871add605345e4b18d446d5d33951d563b606c4329648b1c92a54f307ab7722294a95c1c42b3734586fd5044e39553c81458e1f85e4dec0275c9248ebc56f623cd08824386c16918a993e3454d1581c8a9c3a032b79d18e21f84c08e033bae46c098f6d55f83c28bef252aa43335dde63c96465125e46101accca40437a0810f616584d73cac1c54071a05c32f21bde9d2ad90e809f61862db966671eb2ace541290502d90185d819a7d0e566fa5e454e3cc7da8c93187a3af32dc831421c9b7ea984ad7c45483a119bca58ba8a1fc2201598884ce93255e359e8f989224548ab7f91657a56f83d68a21656d854432362a71d0727f45ca0138605885ac4314d2a1c8f61522e8aa91813fd6ab0ac438c04c182e25e774ac2c3c967306eda695d15505182a788191a46b3252a9917b56e23c92a7a51fc09f43221b806178272c11de8598f6a049d5ca2b342c08c4f13ca8d79ab7447bc0871ed525653b19b78bdb1fef17a3a14a2607dbcb7952a043012642a782d22706c08487bbcb95a6494dff891f75a86ce15c77c73c880e516a41139df7f0adf4d393cc564b68896d419948dcbb74740b5f85115c65ba0e5602449d10b20783abbd56b1b1b2cf5c73768563056eb76e8338515da7af1b62b29a05a1ed531de0b84b4c3033e80c3d50866dd3c0a17b9387e97963165720b587785912bdab15c946893024579923f16a46bbac862aa823d81619c616af92a0575019af5732c4a80686c1c4f81ac743611e45453e820878aa6498c28984b17b073d38945a73c8f8e033c038a5a25504a3324679490285be911109c35dec1c7ffa48d62c3acaddb348150b9a0de15dc40000000000000000000000000000000000000000000000000000000000000000";
 
-        let ek_bytes = hex::decode(&encoded_key).expect("failed to unhex");
+        let ek_bytes = hex::decode(encoded_key).expect("failed to unhex");
         let ek_encoded =
             Encoded::<ml_kem::kem::EncapsulationKey<ml_kem::MlKem512Params>>::try_from(
                 &ek_bytes[..],
@@ -228,62 +187,3 @@ mod tests {
         assert_eq!(ek_decoded_in, ek_decoded_out);
     }
 }
-
-// // ========================================================================== //
-// // Unsafe struct transmute
-// // ========================================================================== //
-//
-// use hybrid_array::{typenum::{U256, U32}, Array};
-// use ml_kem::{kem::Kem, ArraySize, KemCore, PkeParams};
-//
-// /// An `EncapsulationKey` provides the ability to encapsulate a shared key so that it can only be
-// /// decapsulated by the holder of the corresponding decapsulation key.
-// #[derive(Clone, Debug, PartialEq)]
-// pub struct EncapsulationKey<P>
-// where
-//     P: ml_kem::kem::KemParams,
-// {
-//     ek_pke: EncryptionKey<P>,
-//     h: B32,
-// }
-//
-// /// An `EncryptionKey` provides the ability to encrypt a value so that it can only be
-// /// decrypted by the holder of the corresponding decapsulation key.
-// #[derive(Clone, Default, Debug, PartialEq)]
-// pub struct EncryptionKey<P>
-// where
-//     P: PkeParams,
-// {
-//     t_hat: NttVector<P::K>,
-//     rho: B32,
-// }
-//
-// impl<P> EncapsulationKey<P>
-// where
-//     P: PkeParams,
-// {
-//     fn twin(key: ml_kem::kem::EncapsulationKey<P>) -> Self {
-//         unsafe {
-//             std::mem::transmute(key)
-//         }
-//     }
-// }
-//
-//
-// /// A 32-byte array, defined here for brevity because it is used several times
-// pub type B32 = Array<u8, U32>;
-//
-// /// A vector of K NTT-domain polynomials
-// #[derive(Clone, Default, Debug, PartialEq)]
-// pub struct NttVector<K: ArraySize>(pub Array<NttPolynomial, K>);
-//
-// /// An element of the ring `T_q`, i.e., a tuple of 128 elements of the direct sum components of `T_q`.
-// #[derive(Clone, Default, Debug, PartialEq)]
-// pub struct NttPolynomial(pub Array<FE, U256>);
-//
-// pub type Integer = u16;
-//
-// /// An element of GF(q).  Although `q` is only 16 bits wide, we use a wider uint type to so that we
-// /// can defer modular reductions.
-// #[derive(Copy, Clone, Debug, Default, PartialEq)]
-// pub struct FE(pub Integer);
