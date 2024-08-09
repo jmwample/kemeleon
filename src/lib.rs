@@ -1,3 +1,11 @@
+// #![no_std]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![warn(clippy::pedantic)] // Be pedantic by default
+#![warn(clippy::integer_division_remainder_used)] // Be judicious about using `/` and `%`
+#![allow(clippy::cast_possible_truncation)]
+// do not warn about downcasting
+// #![deny(missing_docs)] // Require all public interfaces to be documented
+
 //! Implementation of Kemeleon Encodings
 //!
 //! [Paper](https://eprint.iacr.org/2024/1086.pdf).
@@ -56,9 +64,9 @@
 //! Kemeleon.DecodeCtxt(r):
 //!
 //! ```
+#![feature(generic_const_exprs)]
 
 use core::fmt::Debug;
-use std::io::Error;
 
 mod fips;
 pub mod kemeleon;
@@ -86,6 +94,13 @@ impl From<u16> for FieldElement {
 }
 
 const ARR_LEN: usize = 256;
+const RHO_LEN: usize = 32;
+
+/// byte array
+type Barr8<const N: usize> = [u8; N];
+/// value array -- array of polynomial values
+type ValueArray<const N: usize, const K: usize> = [[u16; N]; K];
+type NttArray<const K: usize> = ValueArray<ARR_LEN, K>;
 
 #[allow(dead_code)]
 impl FieldElement {
@@ -93,8 +108,6 @@ impl FieldElement {
     pub const Q32: u32 = Self::Q as u32;
     pub const Q64: u64 = Self::Q as u64;
 }
-
-type ValueArray = [FieldElement; ARR_LEN];
 
 /// Convert between Kemeleon and `ml-kem` values.
 pub trait Transcode {
@@ -107,21 +120,11 @@ pub trait Transcode {
     fn from_fips(t: Self::Fips) -> Self;
 }
 
-pub trait ValueArrayEncoder {
-    fn encode(p: &ValueArray) -> Vec<u8>;
-}
-pub trait ValueArrayDecoder {
-    fn decode(c: impl AsRef<[u8]>) -> Result<ValueArray, Error>;
-}
-
 // ========================================================================== //
 // Encoding Sizes and Generics
 // ========================================================================== //
 
 pub trait EncodingSize {
-    type EncodedKeyType;
-    type EncodedCiphertextType;
-
     /// Number of bits used to represent field elements
     const USIZE: usize = 12;
 
@@ -134,8 +137,6 @@ pub trait EncodingSize {
     /// Bitwise Index of the high order bit when computing the kemeleon byte
     /// representation. Computed as $\left\lceil log_{2}(q^{n\cdot k}+1) \right\rceil$
     const HIGH_ORDER_BIT: u64;
-    /// Size of the Kemeleon encoded string as bytes. $\left\lceil (HIGH\_ORDER\_BIT -1)/8 \right\rceil$
-    const ENCODED_SIZE: usize;
     /// Bitmask for the high order byte which will be less than a full byte of
     /// random bits when encoded. $(HIGH\_ORDER\_BIT -1)\ mod\ 8$
     const MSB_BITMASK: u8;
@@ -147,17 +148,22 @@ pub trait EncodingSize {
     const ETA2: usize;
     const DU: usize;
     const DV: usize;
+
+    /// Size of the Kemeleon encoded string as bytes. $\left\lceil (HIGH\_ORDER\_BIT -1)/8 \right\rceil$
+    const ENCODED_SIZE: usize;
+    /// Number of bytes required to represent the object when not encoded
+    const UNENCODED_SIZE: usize = RHO_LEN + ARR_LEN * Self::K;
+
+    /// Number of bytes required to represent the FIPS encoded Encapsulation Key
+    const FIPS_ENCODED_SIZE: usize = RHO_LEN + Self::K * 12 * 32;
 }
 
 impl EncodingSize for ml_kem::MlKem512 {
-    type EncodedKeyType = [u8; 749];
-    type EncodedCiphertextType = [u8; 1498];
-
     const K: usize = 2;
 
-    const ENCODED_SIZE: usize = 749;
-    const MSB_BITMASK: u8 = 0b00011111;
-    const MSB_BITMASK_INV: u8 = 0b11100000;
+    const ENCODED_SIZE: usize = RHO_LEN + 749;
+    const MSB_BITMASK: u8 = 0b0001_1111;
+    const MSB_BITMASK_INV: u8 = 0b1110_0000;
     const HIGH_ORDER_BIT: u64 = 5991;
 
     const ETA1: usize = 3;
@@ -167,14 +173,11 @@ impl EncodingSize for ml_kem::MlKem512 {
 }
 
 impl EncodingSize for ml_kem::MlKem768 {
-    type EncodedKeyType = [u8; 1124];
-    type EncodedCiphertextType = [u8; 1498];
-
     const K: usize = 3;
 
-    const ENCODED_SIZE: usize = 1124;
-    const MSB_BITMASK: u8 = 0b00011111;
-    const MSB_BITMASK_INV: u8 = 0b11100000;
+    const ENCODED_SIZE: usize = RHO_LEN + 1124;
+    const MSB_BITMASK: u8 = 0b0001_1111;
+    const MSB_BITMASK_INV: u8 = 0b1110_0000;
     const HIGH_ORDER_BIT: u64 = 8987;
 
     const ETA1: usize = 2;
@@ -184,15 +187,11 @@ impl EncodingSize for ml_kem::MlKem768 {
 }
 
 impl EncodingSize for ml_kem::MlKem1024 {
-    type EncodedKeyType = [u8; 1498];
-    type EncodedCiphertextType = [u8; 1498];
-
-
     const K: usize = 4;
 
-    const ENCODED_SIZE: usize = 1498;
-    const MSB_BITMASK: u8 = 0b00011111;
-    const MSB_BITMASK_INV: u8 = 0b11100000;
+    const ENCODED_SIZE: usize = RHO_LEN + 1498;
+    const MSB_BITMASK: u8 = 0b0001_1111;
+    const MSB_BITMASK_INV: u8 = 0b1110_0000;
     const HIGH_ORDER_BIT: u64 = 11982;
 
     const ETA1: usize = 2;
@@ -200,6 +199,8 @@ impl EncodingSize for ml_kem::MlKem1024 {
     const DU: usize = 11;
     const DV: usize = 5;
 }
+
+// TODO: check msb bit masks and inversion for each type ^^.
 
 // ========================================================================== //
 // Public Interface objects
@@ -213,77 +214,3 @@ pub type MlKem768 = mlkem::Kemx<ml_kem::MlKem768>;
 
 /// ML-KEM with the parameter set for security category 5, corresponding to key search on a block cipher with a 256-bit key.
 pub type MlKem1024 = mlkem::Kemx<ml_kem::MlKem1024>;
-
-// ========================================================================== //
-// Tests
-// ========================================================================== //
-
-#[cfg(test)]
-mod tests {
-    // use super::*;
-
-    // #[test]
-    // fn encode_decode() {
-    //     let mut rng = rand::thread_rng();
-    //     let k = from_rand_rng(&mut rng);
-
-    //     let c = DeadSimple::encode(&k);
-    //     let p = DeadSimple::decode(c).expect("failed decode");
-
-    //     assert_eq!(k, p)
-    // }
-}
-
-//
-// // ========================================================================== //
-// // DeadSimple
-// // ========================================================================== //
-//
-// /// This is a basic encode / decode for ValueArra. It has many flaws wrt.
-// /// the goals that we set out for an ideal encoding.
-// ///
-// /// - values always less than Q (where Q = 3329)
-// /// - 0 bits since we 3329 < 4096 (12 bits) and we encode values using 16 bits
-// /// - out of the 12 bits used per value, only 3329/4096 values are hit
-// struct DeadSimple {}
-//
-// impl ValueArrayEncoder for DeadSimple {
-//     fn encode(p: &ValueArray) -> Vec<u8> {
-//         let mut c = vec![0u8; ARR_LEN * 2];
-//         p.iter().enumerate().for_each(|(i, v)| {
-//             let a = v.0.to_be_bytes();
-//             c[2 * i] = a[0];
-//             c[2 * i + 1] = a[1];
-//         });
-//         c
-//     }
-// }
-//
-// impl ValueArrayDecoder for DeadSimple {
-//     fn decode(c: impl AsRef<[u8]>) -> Result<ValueArray, Error> {
-//         if c.as_ref().len() < ARR_LEN * 2 {
-//             return Err(Error::other("incorrect length"));
-//         }
-//
-//         let mut p = [FieldElement(0u16); ARR_LEN];
-//         c.as_ref()[..ARR_LEN * 2]
-//             .chunks_exact(2)
-//             .into_iter()
-//             .enumerate()
-//             .for_each(|(i, a)| {
-//                 p[i] = FieldElement(u16::from_be_bytes([a[0], a[1]]) % FieldElement::Q)
-//             });
-//
-//         Ok(p)
-//     }
-// }
-//
-// impl DeadSimple {
-//     pub fn encode_value(v: &FieldElement) -> [u8; 2] {
-//         v.0.to_be_bytes()
-//     }
-//
-//     pub fn decode_value(v: [u8; 2]) -> FieldElement {
-//         FieldElement(u16::from_be_bytes(v))
-//     }
-// }

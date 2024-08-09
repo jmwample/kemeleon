@@ -1,12 +1,7 @@
 use core::fmt::Debug;
 use std::{io::Error as IoError, marker::PhantomData};
 
-use crate::{
-    kemeleon::KemeleonEk,
-    EncodingSize,
-    Transcode,
-    // ValueArrayEncoder, ValueArray, ValueArrayDecoder,
-};
+use crate::{kemeleon::Encodable, EncodingSize, Transcode};
 
 use kem::{Decapsulate, Encapsulate};
 use ml_kem::{Ciphertext, KemCore, SharedKey};
@@ -29,22 +24,23 @@ where
 impl<P> Kemx<P>
 where
     P: ml_kem::KemCore + EncodingSize,
+    [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+    [(); <P as EncodingSize>::ENCODED_SIZE]:,
+    [(); <P as EncodingSize>::K]:,
 {
-    pub fn generate(
-        rng: &mut impl CryptoRngCore,
-    ) -> Result<(KDecapsulationKey<P>, KEncapsulationKey<P>), IoError> {
+    pub fn generate(rng: &mut impl CryptoRngCore) -> (KDecapsulationKey<P>, KEncapsulationKey<P>) {
         // random u8 for the most significant byte which will be less than 8 bits.
         let msb_rand = rng.next_u32() as u8;
 
         for _ in 0..MAX_RETRIES {
             let (dk, ek) = P::generate(rng);
-            let kek = KEncapsulationKey::<P> {
+            let encap_key = KEncapsulationKey::<P> {
                 key: ek,
                 byte: msb_rand,
             };
-            if kek.satisfies_sampling() {
-                let kdk = KDecapsulationKey::<P>(dk);
-                return Ok((kdk, kek));
+            if encap_key.satisfies_sampling() {
+                let decap_key = KDecapsulationKey::<P>(dk);
+                return (decap_key, encap_key);
             }
 
             continue;
@@ -128,7 +124,7 @@ where
         encapsulated_key: &EncodedCiphertext<P>,
     ) -> Result<SharedKey<P>, Self::Error> {
         let ek = encapsulated_key.as_fips();
-        self.0.decapsulate(&ek)
+        self.0.decapsulate(ek)
     }
 }
 
@@ -153,7 +149,6 @@ where
 {
     type Fips = ml_kem::Ciphertext<P>;
 
-
     fn as_fips(&self) -> &Self::Fips {
         #[allow(deprecated)]
         Self::Fips::from_slice(&self.bytes)
@@ -177,129 +172,36 @@ mod test {
     use super::*;
     use crate::kemeleon::Encode;
 
-    use ml_kem::{Encoded, EncodedSizeUser, KemCore, MlKem512};
+    use ml_kem::{Encoded, EncodedSizeUser, KemCore, MlKem1024, MlKem512, MlKem768};
 
-    // #[test]
-    // fn generate_keys_sampled() {
-    //     let mut rng = rand::thread_rng();
-    //     let (dk, ek) = generate_sampled::<MlKem512>(&mut rng).expect("key generation failed");
-
-    //     let ek_encoded: Vec<u8> = ek.encode();
-    //     let ek_decoded = <MlKem512 as KemCore>::EncapsulationKey::decode(&ek_encoded);
-
-    //     assert_eq!(ek_decoded, ek);
-    //     let (ct, k_send) = ek_decoded.encapsulate(&mut rng).unwrap();
-
-    //     let k_recv = dk.decapsulate(&ct).unwrap();
-    //     assert_eq!(k_send, k_recv);
-    // }
-
-    #[test]
-    fn generate_normal() {
+    fn generate_trial<P>()
+    where
+        P: ml_kem::KemCore + EncodingSize,
+        [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::K]:,
+    {
         let mut rng = rand::thread_rng();
-        let (dk, ek) = crate::MlKem512::generate(&mut rng).expect("keygen failed");
+        let (dk, ek) = Kemx::<P>::generate(&mut rng);
 
         let ek_encoded: Vec<u8> = ek.as_bytes().to_vec();
 
-        #[allow(deprecated)]
-        let ek_bytes =
-            Encoded::<<MlKem512 as ml_kem::KemCore>::EncapsulationKey>::from_slice(&ek_encoded);
-        let ek_decoded = <MlKem512 as KemCore>::EncapsulationKey::from_bytes(ek_bytes);
+        // TODO: causing TryFromSlice Error
+        let ek_bytes = Encoded::<<P as KemCore>::EncapsulationKey>::try_from(&ek_encoded[..])
+            .expect("failed to create hybrid_array::Array");
+        let ek_decoded = <P as KemCore>::EncapsulationKey::from_bytes(&ek_bytes);
 
         let (ct, k_send) = ek.encapsulate(&mut rng).unwrap();
         assert_eq!(ek_decoded, ek.to_fips());
 
-        // let ct = Ciphertext::<MlKem512>::from_bytes(ct);
         let k_recv = dk.decapsulate(&ct).unwrap();
         assert_eq!(k_send, k_recv);
     }
+
+    #[test]
+    fn generate_keys_sampled() {
+        generate_trial::<MlKem512>();
+        generate_trial::<MlKem768>();
+        generate_trial::<MlKem1024>();
+    }
 }
-
-// impl<EK, P> KemeleonEk<EK> for P::EncapsulationKey
-// where
-//     P: KemCore,
-//     EK: Encapsulate<Ciphertext<P>, SharedKey<P>> + EncodedSizeUser + Debug + PartialEq,
-//     EK: Encapsulate<Array<u8, <P as KemCore>::CiphertextSize>, Array<u8, U32>>,
-// {
-//     fn can_encode(&self) -> bool {
-//         true
-//     }
-//
-//     fn encode(&self) -> Vec<u8> {
-//         self.as_bytes().to_vec()
-//     }
-//
-//     fn decode(c: impl AsRef<[u8]>) -> Self {
-//         #[allow(deprecated)] // I don't understand what they want for the TryFrom format.
-//         let ek_bytes = Encoded::<P::EncapsulationKey>::from_slice(c.as_ref());
-//         <P as KemCore>::EncapsulationKey::from_bytes(ek_bytes)
-//     }
-// }
-
-// #[cfg(not(feature = "deterministic"))]
-// impl<P> ml_kem::KemCore for Kemx<P>
-// where
-//     P: KemCore,
-//     <P as KemCore>::DecapsulationKey:
-//         Decapsulate<Ciphertext<P>, SharedKey<P>> + EncodedSizeUser + Debug + PartialEq,
-//     <P as KemCore>::DecapsulationKey:
-//         Decapsulate<Array<u8, <P as KemCore>::CiphertextSize>, Array<u8, U32>>,
-//     <P as KemCore>::EncapsulationKey:
-//         Encapsulate<Ciphertext<P>, SharedKey<P>> + EncodedSizeUser + Debug + PartialEq,
-//     <P as KemCore>::EncapsulationKey:
-//         Encapsulate<Array<u8, <P as KemCore>::CiphertextSize>, Array<u8, U32>>,
-// {
-//     type SharedKeySize = U32;
-//     type CiphertextSize = P::CiphertextSize;
-//     type DecapsulationKey = P::DecapsulationKey;
-//     type EncapsulationKey = P::EncapsulationKey;
-//
-//     /// Generate a new (decapsulation, encapsulation) key pair
-//     fn generate(rng: &mut impl CryptoRngCore) -> (Self::DecapsulationKey, Self::EncapsulationKey) {
-//         // let most_sign_byte_rand = rng.next_u32() as u8;
-//
-//         for _ in 0..MAX_RETRIES {
-//             let (dk, ek) = P::generate(rng);
-//             if can_encode::<P>(&ek) {
-//                 return (dk, ek);
-//             }
-//
-//             continue;
-//         }
-//         panic!("failed to generate key - you have a bad random number generator")
-//     }
-// }
-//
-// #[cfg(feature = "deterministic")]
-// impl<P> ml_kem::KemCore for Kemx<P>
-// where
-//     P: KemCore + EncodingSize + ParameterSet,
-//     <P as KemCore>::DecapsulationKey:
-//         Decapsulate<Ciphertext<P>, SharedKey<P>> + EncodedSizeUser + Debug + PartialEq,
-//     <P as KemCore>::EncapsulationKey: Encapsulate<Ciphertext<P>, SharedKey<P>>
-//         + EncapsulateDeterministic<Ciphertext<P>, SharedKey<P>>
-//         + EncodedSizeUser
-//         + Debug
-//         + PartialEq,
-// {
-//     type SharedKeySize = U32;
-//     type CiphertextSize = P::CiphertextSize;
-//     type DecapsulationKey = P::DecapsulationKey;
-//     type EncapsulationKey = P::EncapsulationKey;
-//
-//     /// Generate a new (decapsulation, encapsulation) key pair
-//     fn generate(rng: &mut impl CryptoRngCore) -> (Self::DecapsulationKey, Self::EncapsulationKey) {
-//         let (dk, ek) = P::generate(rng);
-//         (dk, ek)
-//     }
-//
-//     #[cfg(feature = "deterministic")]
-//     fn generate_deterministic(
-//         d: &B32,
-//         z: &B32,
-//     ) -> (Self::DecapsulationKey, Self::EncapsulationKey) {
-//         let dk = P::generate_deterministic(d, z);
-//         let ek = dk.encapsulation_key().clone();
-//         (dk, ek)
-//     }
-// }
