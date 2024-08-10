@@ -14,6 +14,7 @@ use rand_core::CryptoRngCore;
 /// Number of retries to generate a key pair that satisfies the Kemeleon criteria.
 const MAX_RETRIES: usize = 64;
 
+#[derive(Debug, PartialEq, PartialOrd)]
 pub struct Kemx<P>
 where
     P: ml_kem::KemCore,
@@ -53,6 +54,9 @@ where
 // Encapsulation Key
 // ========================================================================== //
 
+// TODO: store the local representation created by from_fips so that we don't
+// have to compute it if we re-use the key for some reason (or call as_bytes
+// more than once).
 #[derive(Debug, PartialEq, PartialOrd)]
 pub struct KEncapsulationKey<P>
 where
