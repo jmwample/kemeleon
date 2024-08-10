@@ -13,9 +13,11 @@
 //! ## Usage
 //!
 //! ```
-//! use ml_kem::MlKem512;
+//! use kemeleon::MlKem512;
+//! use kem::{Encapsulate, Decapsulate};
+//!
 //! let mut rng = rand::thread_rng();
-//! let (dk, ek) = Kemx::<MlKem512>::generate(&mut rng).expect("keygen failed");
+//! let (dk, ek) = MlKem512::generate(&mut rng);
 //!
 //! // // Converting the Encapsulation key to bytes and back in order to be sent.
 //! // let ek_encoded: Vec<u8> = ek.as_bytes().to_vec();
@@ -142,7 +144,7 @@ pub trait EncodingSize {
     const MSB_BITMASK: u8;
     /// Bitmask for the high order byte which will be less than a full byte of
     /// random bits when encoded. Inversion of [`EncodingSize::MSB_BITMASK`].
-    const MSB_BITMASK_INV: u8;
+    const MSB_BITMASK_INV: u8 = !Self::MSB_BITMASK;
 
     const ETA1: usize;
     const ETA2: usize;
@@ -162,8 +164,7 @@ impl EncodingSize for ml_kem::MlKem512 {
     const K: usize = 2;
 
     const ENCODED_SIZE: usize = RHO_LEN + 749;
-    const MSB_BITMASK: u8 = 0b0001_1111;
-    const MSB_BITMASK_INV: u8 = 0b1110_0000;
+    const MSB_BITMASK: u8 = 0b1000_0000;
     const HIGH_ORDER_BIT: u64 = 5991;
 
     const ETA1: usize = 3;
@@ -176,8 +177,7 @@ impl EncodingSize for ml_kem::MlKem768 {
     const K: usize = 3;
 
     const ENCODED_SIZE: usize = RHO_LEN + 1124;
-    const MSB_BITMASK: u8 = 0b0001_1111;
-    const MSB_BITMASK_INV: u8 = 0b1110_0000;
+    const MSB_BITMASK: u8 = 0b1111_1000;
     const HIGH_ORDER_BIT: u64 = 8987;
 
     const ETA1: usize = 2;
@@ -190,8 +190,7 @@ impl EncodingSize for ml_kem::MlKem1024 {
     const K: usize = 4;
 
     const ENCODED_SIZE: usize = RHO_LEN + 1498;
-    const MSB_BITMASK: u8 = 0b0001_1111;
-    const MSB_BITMASK_INV: u8 = 0b1110_0000;
+    const MSB_BITMASK: u8 = 0b1100_0000;
     const HIGH_ORDER_BIT: u64 = 11982;
 
     const ETA1: usize = 2;
@@ -199,8 +198,6 @@ impl EncodingSize for ml_kem::MlKem1024 {
     const DU: usize = 11;
     const DV: usize = 5;
 }
-
-// TODO: check msb bit masks and inversion for each type ^^.
 
 // ========================================================================== //
 // Public Interface objects
