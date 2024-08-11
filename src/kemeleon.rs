@@ -113,13 +113,13 @@ where
         }
 
         // Get the random mask byte from the high order bits
-        let rand_byte = c.as_ref()[P::ENCODED_SIZE - (RHO_LEN + 1)] & P::MSB_BITMASK;
+        let rand_byte = c.as_ref()[P::T_HAT_LEN - 1] & P::MSB_BITMASK;
 
         let mut rho = [0u8; RHO_LEN];
-        rho[..].clone_from_slice(&c.as_ref()[P::ENCODED_SIZE - RHO_LEN..]);
+        rho[..].clone_from_slice(&c.as_ref()[P::T_HAT_LEN..]);
 
         let base = BigUint::from(FieldElement::Q);
-        let mut r = BigUint::from_bytes_le(&c.as_ref()[..P::ENCODED_SIZE - RHO_LEN]);
+        let mut r = BigUint::from_bytes_le(&c.as_ref()[..P::T_HAT_LEN]);
 
         // remove the randomized the high order bits by setting every bit above
         // the HIGH_ORDER_BIT to 0.
@@ -179,14 +179,14 @@ where
         let b = out.to_bytes_le();
 
         // avoid oout-of-bounds access if high order byte is 0x00
-        let l = min(P::ENCODED_SIZE - RHO_LEN, b.len());
+        let l = min(P::T_HAT_LEN, b.len());
         k[..l].copy_from_slice(&b[..l]);
 
         // randomize the high order bits
-        k[P::ENCODED_SIZE - (RHO_LEN + 1)] |= self.byte & <P as EncodingSize>::MSB_BITMASK;
+        k[P::T_HAT_LEN - 1] |= self.byte & <P as EncodingSize>::MSB_BITMASK;
 
         // append rho
-        k[P::ENCODED_SIZE - RHO_LEN..].copy_from_slice(&rho[..]);
+        k[P::T_HAT_LEN..].copy_from_slice(&rho[..]);
 
         Ok(!out.bit(2996))
     }
@@ -263,11 +263,124 @@ where
 // Tests
 // ========================================================================== //
 
+#[allow(clippy::integer_division_remainder_used)]
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::mlkem::Kemx;
-    use ml_kem::MlKem512;
+    use ml_kem::{MlKem1024, MlKem512, MlKem768};
+
+    // TODO: explicitly test the boundary where sampling fails for each variant
+    #[test]
+    fn sampling_boundary() {
+        todo!("incomplete test");
+    }
+
+    // TODO: bit Frequency analysis test
+    #[test]
+    fn bit_entropy_check() {
+        todo!("incomplete test");
+    }
+
+    // TODO: Consistent encoding test - decode then re-encode you should get the same bytes
+    #[test]
+    fn consistency() {
+        todo!("incomplete test");
+    }
+
+    fn value_check<P>(b: &[u8], v: &BigUint, description: &str)
+    where
+        P: KemCore + EncodingSize,
+        [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::K]:,
+    {
+        let encoded = Encoded::<P::EncapsulationKey>::try_from(b).unwrap();
+        let key = EncapsulationKey::<P> {
+            key: P::EncapsulationKey::from_bytes(&encoded),
+            byte: 0x00,
+        };
+        let kv = BigUint::from_bytes_le(&key.as_bytes()[..P::T_HAT_LEN]);
+        assert_eq!(&kv, v, "{description}");
+    }
+
+    // make sure specific values map in the way we expect them to.
+    fn specific_values_trial<P>()
+    where
+        P: KemCore + EncodingSize,
+        [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::K]:,
+    {
+        let zero = [0u8; P::FIPS_ENCODED_SIZE];
+        value_check(&zero, &BigUint::ZERO, "zero");
+
+        // 01 00 -> 01
+        let mut one = zero;
+        one[0] = 0x01_u8;
+        value_check(&one, &BigUint::from(1_u64), "one -> [0][0] = 1");
+
+        // 01 0d -> 3329 -> 0
+        let mut one = zero;
+        one[0] = 0x01_u8;
+        one[1] = 0x0d_u8;
+        value_check(&one, &BigUint::ZERO, "one -> [0][0] = 1");
+
+        // 00 10 00 -> 3329   (1<<12)le
+        let mut x3329 = zero;
+        x3329[1] = 0x10_u8;
+        value_check(&x3329, &BigUint::from(3329_u64), "[0][1] = 1");
+
+        // ff 0f 00 -> 0x0fff % 3329
+        let mut x = zero;
+        x[0] = 0xff_u8;
+        x[1] = 0x0f_u8;
+        value_check(&x, &BigUint::from(0x0fff % 3329_u64), "[0][1] = ff");
+
+        // 00 f0 0f -> 0xff * 3329
+        let mut x = zero;
+        x[1] = 0xf0_u8;
+        x[2] = 0x0f_u8;
+        value_check(&x, &BigUint::from(3329_u64 * 0xff_u64), "[0][1] = ff");
+
+        // 01 10 -> 3330
+        let mut x = zero;
+        x[0] = 0x01_u8;
+        x[1] = 0x10_u8;
+        value_check(&x, &BigUint::from(3330_u64), "01 10 => 3330");
+
+        // 00000000... 00 00 10 00 ->  3329 ^(P::K * 256 - 1)
+        let mut x = zero;
+        x[P::FIPS_ENCODED_SIZE - RHO_LEN - 2] = 0x10_u8;
+        value_check(
+            &x,
+            &BigUint::from(3329_u64).pow((P::K * ARR_LEN - 1) as u32),
+            ".... 00 01 00 => 3329 ^(P::K * 256 - 1)",
+        );
+
+        // 00000000... 0000f0ff ->  (0xff % 3329) * 3329 ^(P::K * 256 - 1)
+        let mut x = zero;
+        x[P::FIPS_ENCODED_SIZE - RHO_LEN - 1] = 0xff_u8;
+        x[P::FIPS_ENCODED_SIZE - RHO_LEN - 2] = 0xf0_u8;
+        value_check(
+            &x,
+            &(BigUint::from(0x0fff_u64 % 3329_u64)
+                * BigUint::from(3329_u64).pow((P::K * ARR_LEN - 1) as u32)),
+            ".... 00 f0 ff => (0x0fff % 3329) * 3329 ^(P::K * 256 - 1)",
+        );
+
+        // 00000000... 00 00 00 00 | ff ->  0
+        let mut x = zero;
+        x[P::FIPS_ENCODED_SIZE - RHO_LEN] = 0xff_u8;
+        value_check(&x, &BigUint::ZERO, ".... 00 00 00 | ff => 0");
+    }
+
+    #[test]
+    fn specific_values() {
+        specific_values_trial::<MlKem512>();
+        specific_values_trial::<MlKem768>();
+        specific_values_trial::<MlKem1024>();
+    }
 
     fn encode_decode_trial<P>()
     where
@@ -297,26 +410,8 @@ mod tests {
     #[test]
     fn encode_decode() {
         encode_decode_trial::<ml_kem::MlKem512>();
-        println!("512 success");
         encode_decode_trial::<ml_kem::MlKem768>();
-        println!("768 success");
         encode_decode_trial::<ml_kem::MlKem1024>();
-        println!("1024 success");
-    }
-
-    #[test]
-    fn compute_constants() {
-        let q = BigUint::from(FieldElement::Q);
-        let expected_lengths = [2995, 5990, 8986, 11981];
-
-        let n = 256;
-        for k in [1, 2, 3, 4] {
-            let v: BigUint = q.pow(n * k) + 1u32;
-
-            let bits = v.bits() - 1;
-            assert_eq!(bits, expected_lengths[k as usize - 1]);
-            // println!("{} {}", bits, bits%8)
-        }
     }
 
     fn test_encode_decode(encoded_key: &str, b: u8) {
@@ -346,6 +441,7 @@ mod tests {
         );
     }
 
+    // TODO: expand tests to include larger cipher sized
     #[test]
     fn encode_fixed_encap_key() {
         let mut zero = [0u8; 800];
@@ -375,13 +471,24 @@ mod tests {
         test_encode_decode(encoded_key, 0u8);
         test_encode_decode(encoded_key, 1u8);
         test_encode_decode(encoded_key, 0x7fu8);
-        test_encode_decode(encoded_key, 0x7fu8);
+        test_encode_decode(encoded_key, 0xffu8);
 
         let encoded_key = "6290c6bae865138cc97c47ad54c9a2253b6b29a5044ee9abd098321ac1b2a831184b8bbc681516954447d1728c93627e50e36256408582a1cb7285817270753f0b4ed7ca8f260ac9367bb5e45a8ee447c79b161134158a2afc6135c37199642847891a7cf73da9ba4c0b3a1363372ba6062224c9ca9fb46bbfb22fa1e66b6477b53bc7584772850d3c6e8a9739af3b01c9f8a3c281c5ecc23c6fab82351661b2f79a007bb070ac900af8c1e159a06d101f93ab7f81721e33e712bf915083b0193cf0b7c208bc77291d51e90d58d217b2c1853b728daa271a37c26e0d557a15b4195b272294188f1c4a76d308443e32a45ea3b714498fb86a3f7430a8ff9b218519bce2976927acc53e404877033f524410b01c79d15b0c4802a2cd47b6bee983df36c01bb3abff137b4217b1d2acbfe8652f890a03f4c12177490b38a345078a31783c1dd3413eaf7c4cbef32b0d5c165e0428d94aae1ea39f604c6d1515a08f758e5898461ae7c7dd3a0bc5993965f03961a7669cf252af4611b8b3a6e3c35bbea149123779dc41aebb9b5707d93b63b0c09475182a87501259a354d39e243c3c8b69a3ce42250a5024ecb9c658414a2ec051b7468a15763e9c768822ec769ab3ce7b8b1ad38ab9523cba17a778aa6b6bc583beb71c7502fa24f0a1c41dfa7a603654489c15c81a70fad674aab7a469654c46714deb8b6fd8d0686d022859b96dc9e415cc8aa073bb9b53812f0705ab4c2bae23db1ab5b1089e57aaadea299962c284a2bb7b70b23e9ab895d3be9a4416fac244586804ba7399438098fd56b61fc721fba6c10862acc677950b379007d1a12fb793dd15b250148b89956287d474ec44bb9d262c4c1b35ec338956c57f0547173d166cd5a7a17a08841d0845a15aa8b548bb95e9c3391c3cecda07c951b7c0d9235af98ef4178202fa5736ca4940a30be4979dbda4972c7001a06867419290080388b5388c02f57c3667090413bdc8369892e3c6b1048dc39c86de03ccae7c73ec4109ac404a766827d43024652b4412aac36a715321f7c286616c61b38e0965b8ec45733bfac3e44c9e1bab6d86bb4e2ba58b21622c93a8f533ffcaea8127a9656df0449d8d8225147e6a271d";
         test_encode_decode(encoded_key, 0x8eu8);
     }
 
-    // TODO: Frequency analysis test
+    #[test]
+    fn compute_constants() {
+        let q = BigUint::from(FieldElement::Q);
+        let expected_lengths = [2995, 5990, 8986, 11981];
 
-    // TODO: Consistent encoding test
+        let n = 256;
+        for k in [1, 2, 3, 4] {
+            let v: BigUint = q.pow(n * k) + 1u32;
+
+            let bits = v.bits() - 1;
+            assert_eq!(bits, expected_lengths[k as usize - 1]);
+            // println!("{} {}", bits, bits%8)
+        }
+    }
 }
