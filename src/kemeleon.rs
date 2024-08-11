@@ -174,8 +174,10 @@ where
             offset *= &base;
         }
 
+        let sample_success = !out.bit(P::HIGH_ORDER_BIT - 1);
+
         // write out the bytes of the Encapsulation Key
-        out.set_bit(P::HIGH_ORDER_BIT, false);
+        out.set_bit(P::HIGH_ORDER_BIT - 1, false);
         let b = out.to_bytes_le();
 
         // avoid oout-of-bounds access if high order byte is 0x00
@@ -188,7 +190,7 @@ where
         // append rho
         k[P::T_HAT_LEN..].copy_from_slice(&rho[..]);
 
-        Ok(!out.bit(2996))
+        Ok(sample_success)
     }
 }
 
@@ -270,22 +272,78 @@ mod tests {
     use crate::mlkem::Kemx;
     use ml_kem::{MlKem1024, MlKem512, MlKem768};
 
-    // TODO: explicitly test the boundary where sampling fails for each variant
-    #[test]
-    fn sampling_boundary() {
-        todo!("incomplete test");
-    }
-
     // TODO: bit Frequency analysis test
     #[test]
     fn bit_entropy_check() {
         todo!("incomplete test");
     }
 
-    // TODO: Consistent encoding test - decode then re-encode you should get the same bytes
+    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::cast_possible_wrap)]
+    fn sample_boundary_check<P>(lim: usize)
+    where
+        P: KemCore + EncodingSize,
+        [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::K]:,
+    {
+        let mut key_buf = [0u8; P::FIPS_ENCODED_SIZE];
+        for k in -2_i64..3 {
+            let val = lim as i64 + k;
+            key_buf[P::FIPS_ENCODED_SIZE - RHO_LEN - 1] = (val >> 4) as u8;
+            key_buf[P::FIPS_ENCODED_SIZE - RHO_LEN - 2] = ((val & 0x0f) << 4) as u8;
+
+            let ek_encoded = Encoded::<P::EncapsulationKey>::try_from(&key_buf[..])
+                .expect("failed to build hybrid array");
+            let ek_decoded_in = P::EncapsulationKey::from_bytes(&ek_encoded);
+            let ek = EncapsulationKey::<P> {
+                key: ek_decoded_in,
+                byte: 0x00_u8,
+            };
+
+            let mut dst = [0u8; P::ENCODED_SIZE];
+            let sample_success = ek.encode_priv(&mut dst).expect("encode failed");
+
+            assert_eq!(sample_success, k <= 0, "{val} incorrect");
+        }
+    }
+
+    // TODO: explicitly test the boundary where sampling fails for each variant
+    #[test]
+    fn sampling_boundary() {
+        sample_boundary_check::<MlKem512>(1850);
+        sample_boundary_check::<MlKem768>(2759);
+        sample_boundary_check::<MlKem1024>(2057);
+    }
+
+    fn consistency_check<P>()
+    where
+        P: KemCore + EncodingSize,
+        [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::K]:,
+    {
+        let mut rng = rand::thread_rng();
+        // This is the repeated trial generate from random and any key created
+        // is guaranteed to be representable, otherwise it would have panicked
+        let (_dk, ek) = Kemx::<P>::generate(&mut rng);
+        let dst = ek.as_bytes();
+        let mut re_encode = dst;
+
+        for _ in 0..5 {
+            // Encapsulation Key decoded from bytes sent over the wire.
+            let recv_ek = EncapsulationKey::<P>::decode(re_encode).expect("failed decode");
+            re_encode = recv_ek.as_bytes();
+            assert_eq!(hex::encode(re_encode), hex::encode(dst));
+        }
+    }
+
+    // Consistent encoding test - decode then re-encode you should get the same bytes
     #[test]
     fn consistency() {
-        todo!("incomplete test");
+        consistency_check::<MlKem512>();
+        consistency_check::<MlKem768>();
+        consistency_check::<MlKem1024>();
     }
 
     fn value_check<P>(b: &[u8], v: &BigUint, description: &str)
@@ -430,7 +488,8 @@ mod tests {
 
         // Encode encapsulation key using Kemeleon
         let mut dst = [0u8; MlKem512::ENCODED_SIZE];
-        _ = ek_in.encode_priv(&mut dst).expect("failed kemeleon encode");
+        let encodable = ek_in.encode_priv(&mut dst).expect("failed kemeleon encode");
+        assert!(encodable, "non-encodable key provided.");
 
         // Encapsulation Key decoded from bytes sent over the wire.
         let recv_ek = EncapsulationKey::<MlKem512>::decode(dst).expect("failed decode");
@@ -467,7 +526,7 @@ mod tests {
         zero[767] = 0xffu8;
         test_encode_decode(&hex::encode(zero), 0u8);
 
-        let encoded_key = "1d04f737d1811f950ccc2340bff7640bd95ac2350b92ee6a5dcb4ccd05799bd2a25ad5b04a7a90a064387f9f8b6e77c60309a09b0d3307de9c936a91b797906674134fc9fbb5f1b450d5daa7ddc74c26d43aa8b351b4673f6bc32d89f460666475a28765ce722b42e682941b04635371a5234f6b168142c3366ce6bbd24a52a644619856c4303b0292227e9ae16ccaf33fc4f1a9fb537294b0261f7b1ca6ea14fa02bb12871add605345e4b18d446d5d33951d563b606c4329648b1c92a54f307ab7722294a95c1c42b3734586fd5044e39553c81458e1f85e4dec0275c9248ebc56f623cd08824386c16918a993e3454d1581c8a9c3a032b79d18e21f84c08e033bae46c098f6d55f83c28bef252aa43335dde63c96465125e46101accca40437a0810f616584d73cac1c54071a05c32f21bde9d2ad90e809f61862db966671eb2ace541290502d90185d819a7d0e566fa5e454e3cc7da8c93187a3af32dc831421c9b7ea984ad7c45483a119bca58ba8a1fc2201598884ce93255e359e8f989224548ab7f91657a56f83d68a21656d854432362a71d0727f45ca0138605885ac4314d2a1c8f61522e8aa91813fd6ab0ac438c04c182e25e774ac2c3c967306eda695d15505182a788191a46b3252a9917b56e23c92a7a51fc09f43221b806178272c11de8598f6a049d5ca2b342c08c4f13ca8d79ab7447bc0871ed525653b19b78bdb1fef17a3a14a2607dbcb7952a043012642a782d22706c08487bbcb95a6494dff891f75a86ce15c77c73c880e516a41139df7f0adf4d393cc564b68896d419948dcbb74740b5f85115c65ba0e5602449d10b20783abbd56b1b1b2cf5c73768563056eb76e8338515da7af1b62b29a05a1ed531de0b84b4c3033e80c3d50866dd3c0a17b9387e97963165720b587785912bdab15c946893024579923f16a46bbac862aa823d81619c616af92a0575019af5732c4a80686c1c4f81ac743611e45453e820878aa6498c28984b17b073d38945a73c8f8e033c038a5a25504a3324679490285be911109c35dec1c7ffa48d62c3acaddb348150b9a0de15dc40000000000000000000000000000000000000000000000000000000000000000";
+        let encoded_key = "1d04f737d1811f950ccc2340bff7640bd95ac2350b92ee6a5dcb4ccd05799bd2a25ad5b04a7a90a064387f9f8b6e77c60309a09b0d3307de9c936a91b797906674134fc9fbb5f1b450d5daa7ddc74c26d43aa8b351b4673f6bc32d89f460666475a28765ce722b42e682941b04635371a5234f6b168142c3366ce6bbd24a52a644619856c4303b0292227e9ae16ccaf33fc4f1a9fb537294b0261f7b1ca6ea14fa02bb12871add605345e4b18d446d5d33951d563b606c4329648b1c92a54f307ab7722294a95c1c42b3734586fd5044e39553c81458e1f85e4dec0275c9248ebc56f623cd08824386c16918a993e3454d1581c8a9c3a032b79d18e21f84c08e033bae46c098f6d55f83c28bef252aa43335dde63c96465125e46101accca40437a0810f616584d73cac1c54071a05c32f21bde9d2ad90e809f61862db966671eb2ace541290502d90185d819a7d0e566fa5e454e3cc7da8c93187a3af32dc831421c9b7ea984ad7c45483a119bca58ba8a1fc2201598884ce93255e359e8f989224548ab7f91657a56f83d68a21656d854432362a71d0727f45ca0138605885ac4314d2a1c8f61522e8aa91813fd6ab0ac438c04c182e25e774ac2c3c967306eda695d15505182a788191a46b3252a9917b56e23c92a7a51fc09f43221b806178272c11de8598f6a049d5ca2b342c08c4f13ca8d79ab7447bc0871ed525653b19b78bdb1fef17a3a14a2607dbcb7952a043012642a782d22706c08487bbcb95a6494dff891f75a86ce15c77c73c880e516a41139df7f0adf4d393cc564b68896d419948dcbb74740b5f85115c65ba0e5602449d10b20783abbd56b1b1b2cf5c73768563056eb76e8338515da7af1b62b29a05a1ed531de0b84b4c3033e80c3d50866dd3c0a17b9387e97963165720b587785912bdab15c946893024579923f16a46bbac862aa823d81619c616af92a0575019af5732c4a80686c1c4f81ac743611e45453e820878aa6498c28984b17b073d38945a73c8f8e033c038a5a25504a3324679490285be911109c35dec1c7ffa48d62c3acaddb348150b9a0de15d140000000000000000000000000000000000000000000000000000000000000000";
         test_encode_decode(encoded_key, 0u8);
         test_encode_decode(encoded_key, 1u8);
         test_encode_decode(encoded_key, 0x7fu8);
