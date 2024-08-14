@@ -71,12 +71,14 @@ where
     P: KemCore + EncodingSize,
     [(); P::FIPS_ENCODED_SIZE]:,
 {
+    // TODO: must use for now -- not sure it this will stay
     #[must_use]
     pub fn from_parts(t_hat: &[[u16; ARR_LEN]; P::K], rho: &[u8; 32], mask_byte: u8) -> Self {
         let ek_fb = fips::byte_encode(rho, t_hat);
         Self::from_fips_bytes(ek_fb, mask_byte)
     }
 
+    // TODO: should this be a Result cince a key of improper length could panic?
     pub fn from_fips_bytes(ek_fb: impl AsRef<[u8]>, mask_byte: u8) -> Self {
         let ek_fb_e = Encoded::<<P as KemCore>::EncapsulationKey>::try_from(ek_fb.as_ref())
             .map_err(|e| IoError::other(format!("failed to convert to hybrid_array::Array: {e}")))
