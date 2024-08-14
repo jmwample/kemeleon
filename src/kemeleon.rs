@@ -1,9 +1,10 @@
-use crate::{EncodingSize, FieldElement, Transcode, ValueArray, ARR_LEN, fips};
+use crate::RHO_LEN;
+use crate::{fips, Barr8, EncodingSize, FieldElement, ARR_LEN};
 
+use core::cmp::min;
 use core::marker::PhantomData;
-use std::io::{Error as IoError, Write};
+use std::io::Error as IoError;
 
-use ml_kem::Ciphertext;
 use ml_kem::{Encoded, EncodedSizeUser, KemCore};
 use num_bigint::BigUint;
 
@@ -11,7 +12,7 @@ pub use crate::mlkem::EncodedCiphertext;
 pub use crate::mlkem::KEncapsulationKey as EncapsulationKey;
 
 pub trait Encode {
-    /// EncapsulationKey
+    /// Encapsulation Key Type
     type EK;
     /// Encoded type (i.e Encoded Encapsulation Key, or Encoded Ciphertext)
     type ET;
@@ -21,6 +22,11 @@ pub trait Encode {
 
     fn as_bytes(&self) -> Self::ET;
 
+    /// Try to parse from bytes
+    ///
+    /// # Errors
+    /// - length error: input ciphertext is the wrong size
+    ///
     fn try_from_bytes(c: impl AsRef<[u8]>) -> Result<Self::EK, Self::Error>;
 }
 
@@ -28,16 +34,19 @@ pub trait Encode {
 // Encapsulation Key
 // ========================================================================== //
 
-pub trait KemeleonEk: Encode {
+pub trait Encodable: Encode {
     fn satisfies_sampling(&self) -> bool;
 }
 
 impl<P> Encode for EncapsulationKey<P>
 where
     P: KemCore + EncodingSize,
+    [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+    [(); <P as EncodingSize>::ENCODED_SIZE]:,
+    [(); <P as EncodingSize>::K]:,
 {
     type EK = Self;
-    type ET = <P as EncodingSize>::EncodedKeyType;
+    type ET = Barr8<{ <P as EncodingSize>::ENCODED_SIZE }>;
     type Error = IoError;
 
     /// In this formulation a is 1 indexed (as oposed to being 0 indexed)
@@ -54,8 +63,11 @@ where
     /// resulting in a single larger integer whose intermediary bits are no longer
     /// biased.
     fn as_bytes(&self) -> Self::ET {
-        // self.key.as_bytes()
-        todo!("key as bytes implementation incomplete")
+        let mut dst = [0u8; <P as EncodingSize>::ENCODED_SIZE];
+        // we know there will be no size error and we know the key will be encodable
+        // so we do not need the result.
+        let _ = self.encode_priv(&mut dst);
+        dst
     }
 
     /// Kemeleon.Decode(𝑟):
@@ -68,70 +80,118 @@ where
     ///     4 return a
     /// ```
     fn try_from_bytes(c: impl AsRef<[u8]>) -> Result<Self::EK, Self::Error> {
-        #[allow(deprecated)] // I don't understand what they want for the TryFrom format.
-        let ek_bytes = Encoded::<<P as KemCore>::EncapsulationKey>::from_slice(c.as_ref());
-        let key = <P as KemCore>::EncapsulationKey::from_bytes(ek_bytes);
-
-        Ok(EncapsulationKey { key, byte: 0x00 })
+        EncapsulationKey::<P>::decode(c.as_ref())
     }
 }
 
-impl<P> KemeleonEk for EncapsulationKey<P>
+impl<P> Encodable for EncapsulationKey<P>
 where
     P: KemCore + EncodingSize,
+    [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+    [(); <P as EncodingSize>::ENCODED_SIZE]:,
+    [(); <P as EncodingSize>::K]:,
 {
     fn satisfies_sampling(&self) -> bool {
-        // TODO: Example of current incongruity -> encode_priv takes byte array as ValueArray
-        // but we have an EncapsulationKey. So what to encode?
-        encode_priv::<P>(&self.key).1
+        let mut dst = [0u8; <P as EncodingSize>::ENCODED_SIZE];
+        self.encode_priv(&mut dst).expect("should never fail")
     }
 }
 
-fn decode<P>(c: impl AsRef<[u8]>) -> Result<EncapsulationKey<P>, IoError>
+impl<P> EncapsulationKey<P>
 where
     P: KemCore + EncodingSize,
+    [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+    [(); <P as EncodingSize>::ENCODED_SIZE]:,
+    [(); <P as EncodingSize>::K]:,
 {
-    // if c.as_ref().len() < ValueArray::LENGTH * 2 {
-    //     return Err(Error::other("incorrect length"));
-    // }
+    fn decode(c: impl AsRef<[u8]>) -> Result<Self, IoError>
+    where
+        P: KemCore + EncodingSize,
+    {
+        if c.as_ref().len() < <P as EncodingSize>::ENCODED_SIZE {
+            return Err(IoError::other("incorrect length"));
+        }
 
-    let base = BigUint::from(FieldElement::Q);
-    let r = BigUint::from_bytes_le(c.as_ref());
+        // Get the random mask byte from the high order bits
+        let rand_byte = c.as_ref()[P::T_HAT_LEN - 1] & P::MSB_BITMASK;
 
-    let mut out = [FieldElement(0u16); ARR_LEN];
-    let mut scratch: BigUint;
-    for i in 0..ARR_LEN {
-        scratch = BigUint::ZERO;
-        let pk_i = ((&r - &scratch) / base.pow(i as u32)) % FieldElement::Q;
-        scratch += &pk_i;
-        out[i] = FieldElement(pk_i.to_u32_digits()[0] as u16);
+        let mut rho = [0u8; RHO_LEN];
+        rho[..].clone_from_slice(&c.as_ref()[P::T_HAT_LEN..]);
+
+        let base = BigUint::from(FieldElement::Q);
+        let mut r = BigUint::from_bytes_le(&c.as_ref()[..P::T_HAT_LEN]);
+
+        // Remove the randomized the high order bits by setting every bit above
+        // the HIGH_ORDER_BIT to 0.
+        if r.bits() >= P::HIGH_ORDER_BIT {
+            let upper = r.bits();
+            (P::HIGH_ORDER_BIT - 1..=upper).for_each(|i| r.set_bit(i, false));
+        }
+
+        // extract the values
+        let mut vals = [[0u16; ARR_LEN]; P::K];
+        for val in vals.as_flattened_mut().iter_mut() {
+            let pk_i = &r % &base;
+            r = (&r - &pk_i) / &base;
+
+            let k = pk_i.to_u32_digits();
+            *val = if k.is_empty() { 0u16 } else { k[0] as u16 };
+        }
+
+        let bytes = fips::byte_encode::<P>(&rho, &vals);
+        let ek_bytes =
+            Encoded::<<P as KemCore>::EncapsulationKey>::try_from(&bytes[..]).map_err(|e| {
+                IoError::other(format!("failed to convert to hybrid_array::Array: {e}"))
+            })?;
+        let key = <P as KemCore>::EncapsulationKey::from_bytes(&ek_bytes);
+        Ok(EncapsulationKey::<P> {
+            key,
+            byte: rand_byte,
+        })
     }
 
-    let bytes = fips::byte_encode::<P>(&out);
+    fn encode_priv(&self, mut dst: impl AsMut<[u8]>) -> Result<bool, IoError> {
+        let k = dst.as_mut();
+        if k.len() < P::ENCODED_SIZE {
+            return Err(IoError::other(format!(
+                "invalid dst array size. {} != {}",
+                P::ENCODED_SIZE,
+                k.len()
+            )));
+        }
 
-    #[allow(deprecated)] // I don't understand what they want for the TryFrom format.
-    let ek_bytes = Encoded::<<P as KemCore>::EncapsulationKey>::from_slice(&bytes);
-    let key = <P as KemCore>::EncapsulationKey::from_bytes(ek_bytes);
-    Ok(EncapsulationKey::from_fips(key))
-}
+        let mut out = BigUint::ZERO;
+        let base = BigUint::from(FieldElement::Q);
 
-fn encode_priv<P>(p: &<P as KemCore>::EncapsulationKey) -> (Vec<u8>, bool)
-where
-    P: KemCore + EncodingSize,
-{
-    let mut out = BigUint::ZERO;
-    let base = BigUint::from(FieldElement::Q);
+        let vals_fips_encoded = self.key.as_bytes().to_vec();
+        let (rho, vals) = fips::byte_decode::<P>(vals_fips_encoded);
 
-    let vals_fips_encoded = p.as_bytes().to_vec();
-    // can never fail since the format is guaranteed correct by the ml_kem library
-    let vals = fips::byte_decode::<P>(vals_fips_encoded).unwrap();
+        // encode values into an obfuscated object
+        let mut offset = BigUint::from(1u64);
+        for val in vals.as_flattened() {
+            let bigx = BigUint::from(*val);
+            out += bigx * &offset;
+            offset *= &base;
+        }
 
-    for (i, x) in vals.iter().enumerate() {
-        let bigx = BigUint::from(x.0);
-        out += bigx * base.pow(i as u32);
+        let sample_success = out.bits() < P::HIGH_ORDER_BIT;
+
+        // write out the bytes of the Encapsulation Key
+        out.set_bit(P::HIGH_ORDER_BIT - 1, false);
+        let b = out.to_bytes_le();
+
+        // avoid oout-of-bounds access if high order byte is 0x00
+        let l = min(P::T_HAT_LEN, b.len());
+        k[..l].copy_from_slice(&b[..l]);
+
+        // randomize the high order bits
+        k[P::T_HAT_LEN - 1] |= self.byte & <P as EncodingSize>::MSB_BITMASK;
+
+        // append rho
+        k[P::T_HAT_LEN..].copy_from_slice(&rho[..]);
+
+        Ok(sample_success)
     }
-
-    (out.to_bytes_le(), !out.bit(2996))
 }
 
 // ========================================================================== //
@@ -141,12 +201,13 @@ where
 impl<P> Encode for EncodedCiphertext<P>
 where
     P: KemCore + EncodingSize,
+    [(); <P as EncodingSize>::K * RHO_LEN]:,
 {
     /// Encapsulation Key
     type EK = Self;
 
     /// Encoded Cuphertext Type
-    type ET = <P as EncodingSize>::EncodedCiphertextType;
+    type ET = Barr8<{ P::K * RHO_LEN }>;
 
     /// Error Type returned on failed decode
     type Error = IoError;
@@ -167,10 +228,6 @@ where
     }
 }
 
-// fn encode_ctxt_priv<P: EncodingSize>(_p: &ValueArray) -> Vec<u8> {
-//     vec![]
-// }
-// 
 // fn decode_ctxt_priv<P>(
 //     c: impl AsRef<[u8]>,
 //     dst: impl Write,
@@ -181,55 +238,265 @@ where
 //     let idx_r1 = P::DV * ARR_LEN;
 //     let r1 = &c.as_ref()[..c.as_ref().len() - idx_r1];
 //     let r2 = &c.as_ref()[idx_r1..];
-// 
+//
 //     let u = decode::<P>(r2).map_err(|e| IoError::other("error occured while decoding"))?;
 //     let c1 = compress(Into::<[u16; ARR_LEN]>::into(u), P::DU);
 //     let ctxt: Vec<u8> = c1.iter().zip(r2).map(|(v1, v2)| v1 | v2).collect();
-// 
+//
 //     #[allow(deprecated)]
 //     Ok(*Ciphertext::<P>::from_slice(&ctxt))
 // }
-// 
+//
 // const QFD: f64 = 4096.0 / 3329.0;
 // const DFQ: f64 = 3329.0 / 4096.0;
-// 
+//
 // /// x −→ ⌈((2^d)/q)· x⌋
 // fn compress(u: impl AsRef<[u16]>, _du: usize) -> Vec<u16> {
 //     u.as_ref().iter().map(|v| (*v as f64 * QFD + 0.5) as u16).collect()
 // }
-// 
+//
 // /// y −→ ⌈(q/(2^d))· y⌋
-// 
+//
 // fn decompress(c: impl AsRef<[u16]>, _du: usize) -> Vec<u16> {
 //     c.as_ref().iter().map(|v| (*v as f64 * DFQ + 0.5) as u16).collect()
 // }
-// 
+
 // ========================================================================== //
 // Tests
 // ========================================================================== //
 
+#[allow(clippy::integer_division_remainder_used)]
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::mlkem::Kemx;
-    use core::fmt::Debug;
+    use ml_kem::{MlKem1024, MlKem512, MlKem768};
+    // use hex::FromHex;
+
+    fn entropy_check<P>()
+    where
+        P: KemCore + EncodingSize,
+        [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::K]:,
+    {
+        let ek_kb = [0xff; P::ENCODED_SIZE];
+        let ek = EncapsulationKey::<P>::try_from_bytes(ek_kb).expect("failed to parse key");
+
+        let ek_kb_1 = ek.as_bytes();
+        assert_eq!(
+            hex::encode(ek_kb),
+            hex::encode(ek_kb_1),
+            "failed K={}",
+            P::K
+        );
+    }
+
+    // TODO: bit Frequency analysis test -- make sure that the high order byte
+    // doesn't miss setting any bits, leaving non-randomized features.
+    #[test]
+    fn bit_entropy_check() {
+        entropy_check::<MlKem512>();
+        entropy_check::<MlKem768>();
+        entropy_check::<MlKem1024>();
+    }
+
+    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::cast_possible_wrap)]
+    fn sample_boundary_check<P>()
+    where
+        P: KemCore + EncodingSize,
+        [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::K]:,
+    {
+        let ek_kb = [0xff_u8; P::ENCODED_SIZE];
+        let max_ek_k = EncapsulationKey::decode(ek_kb).unwrap();
+        let ek_fips_b = max_ek_k.key.as_bytes();
+        let (rho, max_ntt_vals) = fips::byte_decode(ek_fips_b);
+
+        for k in -2_i16..3 {
+            // Adjust the key such that the kemeleon encoded value is `k in [-2..3]` off
+            // of max. When k >= 1 the value is no longer encodable as it pushes
+            // over to requiring the HIGH_ORDER_BIT to be set.
+            let mut t_hat = max_ntt_vals;
+            t_hat[0][0] = (t_hat[0][0] as i16 + k) as u16;
+            let ek_k = EncapsulationKey::from_parts(&t_hat, &rho, 0xff);
+
+            let mut dst = [0u8; P::ENCODED_SIZE];
+            let sample_success = ek_k.encode_priv(&mut dst).expect("encode failed");
+
+            assert_eq!(sample_success, k <= 0, "{k} incorrect");
+        }
+
+        // Similarly incrementing the high order byte will be high enough to overflow
+        // into the HIGH_ORDER_BIT - making it unencodable.
+        let mut t_hat = [[0_u16; ARR_LEN]; P::K];
+        t_hat[P::K - 1][ARR_LEN - 1] = max_ntt_vals[P::K - 1][ARR_LEN - 1] + 1;
+        let ek_k = EncapsulationKey::from_parts(&t_hat, &rho, 0xff);
+
+        let mut dst = [0u8; P::ENCODED_SIZE];
+        let sample_success = ek_k.encode_priv(&mut dst).expect("encode failed");
+
+        assert!(!sample_success, "increment high order byte incorrect");
+    }
+
+    // Explicitly test the boundary where we throw out samples for each variant
+    #[test]
+    fn sampling_boundary() {
+        sample_boundary_check::<MlKem512>();
+        sample_boundary_check::<MlKem768>();
+        sample_boundary_check::<MlKem1024>();
+    }
+
+    fn consistency_check<P>()
+    where
+        P: KemCore + EncodingSize,
+        [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::K]:,
+    {
+        let mut rng = rand::thread_rng();
+        // This is the repeated-trial generate function and any key created
+        // is guaranteed to be representable, otherwise it would have panicked
+        let (_dk, ek) = Kemx::<P>::generate(&mut rng);
+        let dst = ek.as_bytes();
+        let mut re_encode = dst;
+
+        for _ in 0..5 {
+            // Encapsulation Key decoded from bytes sent over the wire.
+            let recv_ek = EncapsulationKey::<P>::decode(re_encode).expect("failed decode");
+            re_encode = recv_ek.as_bytes();
+            assert_eq!(hex::encode(re_encode), hex::encode(dst));
+        }
+    }
+
+    // Consistent encoding test - decode then re-encode you should get the same bytes
+    #[test]
+    fn consistency() {
+        consistency_check::<MlKem512>();
+        consistency_check::<MlKem768>();
+        consistency_check::<MlKem1024>();
+    }
+
+    fn value_check<P>(b: &[u8], v: &BigUint, description: &str)
+    where
+        P: KemCore + EncodingSize,
+        [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::K]:,
+    {
+        let encoded = Encoded::<P::EncapsulationKey>::try_from(b).unwrap();
+        let key = EncapsulationKey::<P> {
+            key: P::EncapsulationKey::from_bytes(&encoded),
+            byte: 0x00,
+        };
+        if key.satisfies_sampling() {
+            let kv = BigUint::from_bytes_le(&key.as_bytes()[..P::T_HAT_LEN]);
+            assert_eq!(&kv, v, "{description}");
+        }
+    }
+
+    // make sure specific values map in the way we expect them to.
+    fn specific_values_trial<P>()
+    where
+        P: KemCore + EncodingSize,
+        [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::K]:,
+    {
+        let zero = [0u8; P::FIPS_ENCODED_SIZE];
+        value_check(&zero, &BigUint::ZERO, "zero");
+
+        // 01 00 -> 01
+        let mut one = zero;
+        one[0] = 0x01_u8;
+        value_check(&one, &BigUint::from(1_u64), "one -> [0][0] = 1");
+
+        // 01 0d -> 3329 -> 0
+        let mut one = zero;
+        one[0] = 0x01_u8;
+        one[1] = 0x0d_u8;
+        value_check(&one, &BigUint::ZERO, "one -> [0][0] = 1");
+
+        // 00 10 00 -> 3329   (1<<12)le
+        let mut x3329 = zero;
+        x3329[1] = 0x10_u8;
+        value_check(&x3329, &BigUint::from(3329_u64), "[0][1] = 1");
+
+        // ff 0f 00 -> 0x0fff % 3329
+        let mut x = zero;
+        x[0] = 0xff_u8;
+        x[1] = 0x0f_u8;
+        value_check(&x, &BigUint::from(0x0fff % 3329_u64), "[0][1] = ff");
+
+        // 00 f0 0f -> 0xff * 3329
+        let mut x = zero;
+        x[1] = 0xf0_u8;
+        x[2] = 0x0f_u8;
+        value_check(&x, &BigUint::from(3329_u64 * 0xff_u64), "[0][1] = ff");
+
+        // 01 10 -> 3330
+        let mut x = zero;
+        x[0] = 0x01_u8;
+        x[1] = 0x10_u8;
+        value_check(&x, &BigUint::from(3330_u64), "01 10 => 3330");
+
+        // 00000000... 00 00 10 00 ->  3329 ^(P::K * 256 - 1)
+        let mut x = zero;
+        x[P::FIPS_ENCODED_SIZE - RHO_LEN - 2] = 0x10_u8;
+        value_check(
+            &x,
+            &BigUint::from(3329_u64).pow((P::K * ARR_LEN - 1) as u32),
+            ".... 00 01 00 => 3329 ^(P::K * 256 - 1)",
+        );
+
+        // 00000000... 0000f00f ->  (0xff) * 3329 ^(P::K * 256 - 1)
+        let mut x = zero;
+        x[P::FIPS_ENCODED_SIZE - RHO_LEN - 1] = 0x0f_u8;
+        x[P::FIPS_ENCODED_SIZE - RHO_LEN - 2] = 0xf0_u8;
+        value_check(
+            &x,
+            &(BigUint::from(0x00ff_u64) * BigUint::from(3329_u64).pow((P::K * ARR_LEN - 1) as u32)),
+            ".... 00 f0 0f => (0x0ff) * 3329 ^(P::K * 256 - 1)",
+        );
+
+        // 00000000... 00 00 00 00 | ff ->  0
+        let mut x = zero;
+        x[P::FIPS_ENCODED_SIZE - RHO_LEN] = 0xff_u8;
+        value_check(&x, &BigUint::ZERO, ".... 00 00 00 | ff => 0");
+    }
+
+    #[test]
+    fn specific_values() {
+        specific_values_trial::<MlKem512>();
+        specific_values_trial::<MlKem768>();
+        specific_values_trial::<MlKem1024>();
+    }
 
     fn encode_decode_trial<P>()
     where
         P: KemCore + EncodingSize,
-        <P as KemCore>::EncapsulationKey: Debug,
+        [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::ENCODED_SIZE]:,
+        [(); <P as EncodingSize>::K]:,
     {
         let mut rng = rand::thread_rng();
-        let (_dk, ek) = Kemx::<P>::generate(&mut rng).expect("failed generation");
-
-        // TODO: Example of current incongruity -> encode_priv takes byte array as ValueArray
-        // but we have an EncapsulationKey. So what to encode?
-        let c = encode_priv::<P>(&ek.key).0;
+        // This is the repeated trial generate from random and any key created
+        // is guaranteed to be representable, otherwise it would have panicked
+        let (_dk, ek) = Kemx::<P>::generate(&mut rng);
+        let orig = ek.key.as_bytes();
+        let dst = ek.as_bytes();
 
         // Encapsulation Key decoded from bytes sent over the wire.
-        let recv_ek = decode::<P>(c).expect("failed decode");
+        let recv_ek = EncapsulationKey::<P>::decode(dst).expect("failed decode");
 
-        assert_eq!(ek.key, recv_ek.key);
+        assert_eq!(
+            hex::encode(&orig),
+            hex::encode(recv_ek.key.as_bytes()),
+            "b: 0x{:02x}",
+            ek.byte
+        );
     }
 
     #[test]
@@ -239,18 +506,118 @@ mod tests {
         encode_decode_trial::<ml_kem::MlKem1024>();
     }
 
+    fn test_encode_decode(encoded_key: &str, b: u8) {
+        let ek_bytes = hex::decode(encoded_key).expect("failed to unhex");
+        let ek_encoded =
+            Encoded::<ml_kem::kem::EncapsulationKey<ml_kem::MlKem512Params>>::try_from(
+                &ek_bytes[..],
+            )
+            .expect("failed to build hybrid array");
+        let ek_decoded_in =
+            ml_kem::kem::EncapsulationKey::<ml_kem::MlKem512Params>::from_bytes(&ek_encoded);
+        let ek_in = EncapsulationKey::<MlKem512> {
+            key: ek_decoded_in,
+            byte: b,
+        };
+
+        // Encode encapsulation key using Kemeleon
+        let mut dst = [0u8; MlKem512::ENCODED_SIZE];
+        let encodable = ek_in.encode_priv(&mut dst).expect("failed kemeleon encode");
+        assert!(
+            encodable,
+            "non-encodable key provided.\n {}",
+            hex::encode(dst)
+        );
+
+        // Encapsulation Key decoded from bytes sent over the wire.
+        let recv_ek = EncapsulationKey::<MlKem512>::decode(dst).expect("failed decode");
+
+        assert_eq!(
+            hex::encode(ek_in.key.as_bytes()),
+            hex::encode(recv_ek.key.as_bytes())
+        );
+    }
+
+    // TODO: expand tests to include larger cipher sized
+    #[test]
+    fn encode_fixed_encap_key() {
+        let mut zero = [0u8; 800];
+        test_encode_decode(&hex::encode(zero), 0u8);
+
+        zero[0] = 1u8;
+        test_encode_decode(&hex::encode(zero), 0u8);
+
+        zero[0] = 0u8;
+        zero[1] = 1u8;
+        test_encode_decode(&hex::encode(zero), 0u8);
+
+        zero[0] = 1u8;
+        zero[1] = 1u8;
+        test_encode_decode(&hex::encode(zero), 0u8);
+
+        zero[0] = 0xffu8;
+        zero[1] = 0xffu8;
+        test_encode_decode(&hex::encode(zero), 0u8);
+
+        zero[0] = 0x00u8;
+        zero[1] = 0x00u8;
+        zero[767] = 0xffu8;
+        test_encode_decode(&hex::encode(zero), 0u8);
+
+        let encoded_key = "1d04f737d1811f950ccc2340bff7640bd95ac2350b92ee6a5dcb4ccd05799bd2a25ad5b04a7a90a064387f9f8b6e77c60309a09b0d3307de9c936a91b797906674134fc9fbb5f1b450d5daa7ddc74c26d43aa8b351b4673f6bc32d89f460666475a28765ce722b42e682941b04635371a5234f6b168142c3366ce6bbd24a52a644619856c4303b0292227e9ae16ccaf33fc4f1a9fb537294b0261f7b1ca6ea14fa02bb12871add605345e4b18d446d5d33951d563b606c4329648b1c92a54f307ab7722294a95c1c42b3734586fd5044e39553c81458e1f85e4dec0275c9248ebc56f623cd08824386c16918a993e3454d1581c8a9c3a032b79d18e21f84c08e033bae46c098f6d55f83c28bef252aa43335dde63c96465125e46101accca40437a0810f616584d73cac1c54071a05c32f21bde9d2ad90e809f61862db966671eb2ace541290502d90185d819a7d0e566fa5e454e3cc7da8c93187a3af32dc831421c9b7ea984ad7c45483a119bca58ba8a1fc2201598884ce93255e359e8f989224548ab7f91657a56f83d68a21656d854432362a71d0727f45ca0138605885ac4314d2a1c8f61522e8aa91813fd6ab0ac438c04c182e25e774ac2c3c967306eda695d15505182a788191a46b3252a9917b56e23c92a7a51fc09f43221b806178272c11de8598f6a049d5ca2b342c08c4f13ca8d79ab7447bc0871ed525653b19b78bdb1fef17a3a14a2607dbcb7952a043012642a782d22706c08487bbcb95a6494dff891f75a86ce15c77c73c880e516a41139df7f0adf4d393cc564b68896d419948dcbb74740b5f85115c65ba0e5602449d10b20783abbd56b1b1b2cf5c73768563056eb76e8338515da7af1b62b29a05a1ed531de0b84b4c3033e80c3d50866dd3c0a17b9387e97963165720b587785912bdab15c946893024579923f16a46bbac862aa823d81619c616af92a0575019af5732c4a80686c1c4f81ac743611e45453e820878aa6498c28984b17b073d38945a73c8f8e033c038a5a25504a3324679490285be911109c35dec1c7ffa48d62c3acaddb348150b9a0de15d140000000000000000000000000000000000000000000000000000000000000000";
+        test_encode_decode(encoded_key, 0u8);
+        test_encode_decode(encoded_key, 1u8);
+        test_encode_decode(encoded_key, 0x7fu8);
+        test_encode_decode(encoded_key, 0xffu8);
+
+        let encoded_key = "6290c6bae865138cc97c47ad54c9a2253b6b29a5044ee9abd098321ac1b2a831184b8bbc681516954447d1728c93627e50e36256408582a1cb7285817270753f0b4ed7ca8f260ac9367bb5e45a8ee447c79b161134158a2afc6135c37199642847891a7cf73da9ba4c0b3a1363372ba6062224c9ca9fb46bbfb22fa1e66b6477b53bc7584772850d3c6e8a9739af3b01c9f8a3c281c5ecc23c6fab82351661b2f79a007bb070ac900af8c1e159a06d101f93ab7f81721e33e712bf915083b0193cf0b7c208bc77291d51e90d58d217b2c1853b728daa271a37c26e0d557a15b4195b272294188f1c4a76d308443e32a45ea3b714498fb86a3f7430a8ff9b218519bce2976927acc53e404877033f524410b01c79d15b0c4802a2cd47b6bee983df36c01bb3abff137b4217b1d2acbfe8652f890a03f4c12177490b38a345078a31783c1dd3413eaf7c4cbef32b0d5c165e0428d94aae1ea39f604c6d1515a08f758e5898461ae7c7dd3a0bc5993965f03961a7669cf252af4611b8b3a6e3c35bbea149123779dc41aebb9b5707d93b63b0c09475182a87501259a354d39e243c3c8b69a3ce42250a5024ecb9c658414a2ec051b7468a15763e9c768822ec769ab3ce7b8b1ad38ab9523cba17a778aa6b6bc583beb71c7502fa24f0a1c41dfa7a603654489c15c81a70fad674aab7a469654c46714deb8b6fd8d0686d022859b96dc9e415cc8aa073bb9b53812f0705ab4c2bae23db1ab5b1089e57aaadea299962c284a2bb7b70b23e9ab895d3be9a4416fac244586804ba7399438098fd56b61fc721fba6c10862acc677950b379007d1a12fb793dd15b250148b89956287d474ec44bb9d262c4c1b35ec338956c57f0547173d166cd5a7a17a08841d0845a15aa8b548bb95e9c3391c3cecda07c951b7c0d9235af98ef4178202fa5736ca4940a30be4979dbda4972c7001a06867419290080388b5388c02f57c3667090413bdc8369892e3c6b1048dc39c86de03ccae7c73ec4109ac404a766827d43024652b4412aac36a715321f7c286616c61b38e0965b8ec45733bfac3e44c9e1bab1d86bb4e2ba58b21622c93a8f533ffcaea8127a9656df0449d8d8225147e6a271d";
+        test_encode_decode(encoded_key, 0x8eu8);
+    }
+
     #[test]
     fn compute_constants() {
-        let q = BigUint::from(FieldElement::Q);
         let expected_lengths = [2995, 5990, 8986, 11981];
 
-        let n = 256;
-        for k in [1, 2, 3, 4] {
-            let v: BigUint = q.pow(n * k) + 1u32;
+        let base = BigUint::from(FieldElement::Q64);
+        for k in [1_usize, 2, 3, 4] {
+            let mut v = BigUint::ZERO;
+            let mut offset = BigUint::from(1_u64);
+            for _ in 0..k {
+                for _ in 0..ARR_LEN {
+                    v += 3328_u16 * &offset;
+                    offset *= &base;
+                }
+            }
 
-            let bits = v.bits() - 1;
-            assert_eq!(bits, expected_lengths[k as usize - 1]);
-            // println!("{} {}", bits, bits%8)
+            let bits = v.bits() as u32;
+            let over = (BigUint::from(1_u64) << bits) - 1_u64;
+            let under = (BigUint::from(1_u64) << (bits - 1)) - 1_u64;
+
+            assert!(v < over);
+            assert!(v > under);
+
+            assert_eq!(bits - 1, expected_lengths[k - 1]);
+            // println!("{k} {} {}", bits, bits % 8);
+            // println!("{}", v);
         }
+
+        let k = BigUint::from(FieldElement::Q64);
+        let max_value = k.pow(ARR_LEN as u32 * 2_u32) - 1u32;
+        let max_val_bits: u32 = max_value.bits() as u32;
+
+        let mut over = (BigUint::from(1_u64) << max_val_bits) - 1_u64;
+        let under = (BigUint::from(1_u64) << (max_val_bits - 1)) - 1_u64;
+        assert!(max_value < over);
+        assert!(max_value > under);
+
+        over.set_bit(u64::from(max_val_bits - 1), false);
+        assert_eq!(over, under);
+
+        // println!("{}", max_val_bits);
+
+        // let lim_val = BigUint::from(2_u64).pow(max_val_bits);
+        // let lim_val_bitcount = lim_val.bits();
+        // let lim_val_bytes = lim_val.to_bytes_be();
+        // println!("{} {}", lim_val_bitcount, lim_val_bytes.len()); //, hex::encod(lim_val));
     }
 }
