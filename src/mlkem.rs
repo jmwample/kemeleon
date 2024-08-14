@@ -1,10 +1,10 @@
 use core::fmt::Debug;
 use std::{io::Error as IoError, marker::PhantomData};
 
-use crate::{kemeleon::Encodable, EncodingSize, Transcode};
+use crate::{fips, kemeleon::Encodable, EncodingSize, Transcode, ARR_LEN};
 
 use kem::{Decapsulate, Encapsulate};
-use ml_kem::{Ciphertext, KemCore, SharedKey};
+use ml_kem::{Ciphertext, Encoded, EncodedSizeUser, KemCore, SharedKey};
 use rand_core::CryptoRngCore;
 
 // ========================================================================== //
@@ -66,7 +66,28 @@ where
     pub(crate) byte: u8,
 }
 
-impl<P> KEncapsulationKey<P> where P: KemCore + EncodingSize {}
+impl<P> KEncapsulationKey<P>
+where
+    P: KemCore + EncodingSize,
+    [(); P::FIPS_ENCODED_SIZE]:,
+{
+    #[must_use]
+    pub fn from_parts(t_hat: &[[u16; ARR_LEN]; P::K], rho: &[u8; 32], mask_byte: u8) -> Self {
+        let ek_fb = fips::byte_encode(rho, t_hat);
+        Self::from_fips_bytes(ek_fb, mask_byte)
+    }
+
+    pub fn from_fips_bytes(ek_fb: impl AsRef<[u8]>, mask_byte: u8) -> Self {
+        let ek_fb_e = Encoded::<<P as KemCore>::EncapsulationKey>::try_from(ek_fb.as_ref())
+            .map_err(|e| IoError::other(format!("failed to convert to hybrid_array::Array: {e}")))
+            .unwrap();
+        let key = <P as KemCore>::EncapsulationKey::from_bytes(&ek_fb_e);
+        Self {
+            key,
+            byte: mask_byte,
+        }
+    }
+}
 
 impl<P> Encapsulate<EncodedCiphertext<P>, SharedKey<P>> for KEncapsulationKey<P>
 where
