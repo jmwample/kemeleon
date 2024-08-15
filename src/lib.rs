@@ -136,14 +136,8 @@ pub trait EncodingSize {
     /// Number of field elements per equation.
     const K: usize;
 
-    /// Index (0-based index) of the high order bit used when computing the kemeleon byte
-    /// representation. Used to determine if the encoded key satisfies the sampling
-    /// strategy.
-    ///
-    /// Computed as $\left\lceil log_{2}(q^{n\cdot k}+1) - 1 \right\rceil$
-    const HIGH_ORDER_BIT: u64;
     /// Bitmask for the high order byte which will be less than a full byte of
-    /// random bits when encoded. $(HIGH\_ORDER\_BIT -1)\ mod\ 8$
+    /// random bits when encoded. 
     const MSB_BITMASK: u8;
     /// Bitmask for the high order byte which will be less than a full byte of
     /// random bits when encoded. Inversion of [`EncodingSize::MSB_BITMASK`].
@@ -155,11 +149,11 @@ pub trait EncodingSize {
     const DV: usize;
 
     /// Number of bytes for just `t_hat` values in a kemeleon encoded value
+    ///
+    /// $\left\lceil (log_{2}(q^{n\cdot k}) - 1)/8 \right\rceil$
     const T_HAT_LEN: usize;
-    /// Size of the Kemeleon encoded string as bytes. $\left\lceil (HIGH\_ORDER\_BIT -1)/8 \right\rceil$
+    /// Size of the Kemeleon encoded string as bytes. $ T_HAT_LEN + RHO_LEN $
     const ENCODED_SIZE: usize = Self::T_HAT_LEN + RHO_LEN;
-    /// Number of bytes required to represent the object when not encoded
-    const UNENCODED_SIZE: usize = RHO_LEN + ARR_LEN * Self::K;
     /// Number of bytes required to represent the FIPS encoded Encapsulation Key
     const FIPS_ENCODED_SIZE: usize = RHO_LEN + Self::K * 12 * 32;
 }
@@ -168,8 +162,7 @@ impl EncodingSize for ml_kem::MlKem512 {
     const K: usize = 2;
 
     const T_HAT_LEN: usize = 749;
-    const MSB_BITMASK: u8 = 0b1110_0000;
-    const HIGH_ORDER_BIT: u64 = 5990;
+    const MSB_BITMASK: u8 = 0b1100_0000;
 
     const ETA1: usize = 3;
     const ETA2: usize = 2;
@@ -181,8 +174,7 @@ impl EncodingSize for ml_kem::MlKem768 {
     const K: usize = 3;
 
     const T_HAT_LEN: usize = 1124;
-    const MSB_BITMASK: u8 = 0b1111_1110;
-    const HIGH_ORDER_BIT: u64 = 8986;
+    const MSB_BITMASK: u8 = 0b1111_1100;
 
     const ETA1: usize = 2;
     const ETA2: usize = 2;
@@ -194,8 +186,7 @@ impl EncodingSize for ml_kem::MlKem1024 {
     const K: usize = 4;
 
     const T_HAT_LEN: usize = 1498;
-    const MSB_BITMASK: u8 = 0b1111_1000;
-    const HIGH_ORDER_BIT: u64 = 11980;
+    const MSB_BITMASK: u8 = 0b1110_0000;
 
     const ETA1: usize = 2;
     const ETA2: usize = 2;
