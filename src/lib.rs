@@ -70,9 +70,10 @@
 
 use core::fmt::Debug;
 
-mod fips;
 pub mod kemeleon;
+mod fips;
 mod mlkem;
+mod compress;
 
 #[derive(Copy, Clone, Default, PartialEq, PartialOrd)]
 pub(crate) struct FieldElement(pub u16);
@@ -143,8 +144,6 @@ pub trait EncodingSize {
     /// random bits when encoded. Inversion of [`EncodingSize::MSB_BITMASK`].
     const MSB_BITMASK_INV: u8 = !Self::MSB_BITMASK;
 
-    const ETA1: usize;
-    const ETA2: usize;
     const DU: usize;
     const DV: usize;
 
@@ -156,6 +155,10 @@ pub trait EncodingSize {
     const ENCODED_SIZE: usize = Self::T_HAT_LEN + RHO_LEN;
     /// Number of bytes required to represent the FIPS encoded Encapsulation Key
     const FIPS_ENCODED_SIZE: usize = RHO_LEN + Self::K * 12 * 32;
+
+    const CT_VSIZE: usize = Self::DV * 32;
+    const CT_USIZE: usize = Self::DU * 32 * Self::K;
+    const CT_SIZE: usize = Self::CT_USIZE + Self::CT_VSIZE;
 }
 
 impl EncodingSize for ml_kem::MlKem512 {
@@ -164,8 +167,6 @@ impl EncodingSize for ml_kem::MlKem512 {
     const T_HAT_LEN: usize = 749;
     const MSB_BITMASK: u8 = 0b1100_0000;
 
-    const ETA1: usize = 3;
-    const ETA2: usize = 2;
     const DU: usize = 10;
     const DV: usize = 4;
 }
@@ -176,8 +177,6 @@ impl EncodingSize for ml_kem::MlKem768 {
     const T_HAT_LEN: usize = 1124;
     const MSB_BITMASK: u8 = 0b1111_1100;
 
-    const ETA1: usize = 2;
-    const ETA2: usize = 2;
     const DU: usize = 10;
     const DV: usize = 4;
 }
@@ -188,8 +187,6 @@ impl EncodingSize for ml_kem::MlKem1024 {
     const T_HAT_LEN: usize = 1498;
     const MSB_BITMASK: u8 = 0b1110_0000;
 
-    const ETA1: usize = 2;
-    const ETA2: usize = 2;
     const DU: usize = 11;
     const DV: usize = 5;
 }

@@ -165,6 +165,7 @@ where
     P: KemCore,
 {
     pub(crate) bytes: Vec<u8>,
+    pub(crate) fips: Ciphertext<P>,
     pub(crate) _p: PhantomData<P>,
 }
 
@@ -177,18 +178,17 @@ where
     type Fips = ml_kem::Ciphertext<P>;
 
     fn as_fips(&self) -> &Self::Fips {
-        #[allow(deprecated)]
-        Self::Fips::from_slice(&self.bytes)
+        &self.fips
     }
 
     fn to_fips(self) -> Self::Fips {
-        #[allow(deprecated)]
-        Ciphertext::<P>::clone_from_slice(&self.bytes)
+        self.fips
     }
 
     fn from_fips(t: Self::Fips) -> Self {
         Self {
             bytes: t.to_vec(),
+            fips: t,
             _p: PhantomData,
         }
     }
