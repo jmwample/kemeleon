@@ -70,10 +70,9 @@
 
 use core::fmt::Debug;
 
-pub mod kemeleon;
 mod fips;
+pub mod kemeleon;
 mod mlkem;
-mod compress;
 
 #[derive(Copy, Clone, Default, PartialEq, PartialOrd)]
 pub(crate) struct FieldElement(pub u16);
@@ -87,6 +86,12 @@ impl Debug for FieldElement {
 impl AsRef<u16> for FieldElement {
     fn as_ref(&self) -> &u16 {
         &self.0
+    }
+}
+
+impl AsMut<u16> for FieldElement {
+    fn as_mut(&mut self) -> &mut u16 {
+        &mut self.0
     }
 }
 
@@ -138,7 +143,7 @@ pub trait EncodingSize {
     const K: usize;
 
     /// Bitmask for the high order byte which will be less than a full byte of
-    /// random bits when encoded. 
+    /// random bits when encoded.
     const MSB_BITMASK: u8;
     /// Bitmask for the high order byte which will be less than a full byte of
     /// random bits when encoded. Inversion of [`EncodingSize::MSB_BITMASK`].
@@ -151,7 +156,7 @@ pub trait EncodingSize {
     ///
     /// $\left\lceil (log_{2}(q^{n\cdot k}) - 1)/8 \right\rceil$
     const T_HAT_LEN: usize;
-    /// Size of the Kemeleon encoded string as bytes. $ T_HAT_LEN + RHO_LEN $
+    /// Size of the Kemeleon encoded string as bytes. $ `T_HAT_LEN` + `RHO_LEN` $
     const ENCODED_SIZE: usize = Self::T_HAT_LEN + RHO_LEN;
     /// Number of bytes required to represent the FIPS encoded Encapsulation Key
     const FIPS_ENCODED_SIZE: usize = RHO_LEN + Self::K * 12 * 32;

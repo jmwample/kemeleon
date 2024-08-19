@@ -91,7 +91,7 @@ where
     }
 }
 
-impl<P> Encapsulate<EncodedCiphertext<P>, SharedKey<P>> for KEncapsulationKey<P>
+impl<P> Encapsulate<KCiphertext<P>, SharedKey<P>> for KEncapsulationKey<P>
 where
     P: KemCore,
 {
@@ -100,12 +100,12 @@ where
     fn encapsulate(
         &self,
         rng: &mut impl CryptoRngCore,
-    ) -> Result<(EncodedCiphertext<P>, SharedKey<P>), Self::Error> {
+    ) -> Result<(KCiphertext<P>, SharedKey<P>), Self::Error> {
         let (ek, ss) = self
             .key
             .encapsulate(rng)
             .map_err(|_| IoError::other("failed encapsulation"))?;
-        Ok((EncodedCiphertext::<P>::from_fips(ek), ss))
+        Ok((KCiphertext::<P>::from_fips(ek), ss))
     }
 }
 
@@ -140,16 +140,13 @@ pub struct KDecapsulationKey<P>(P::DecapsulationKey)
 where
     P: KemCore;
 
-impl<P> Decapsulate<EncodedCiphertext<P>, SharedKey<P>> for KDecapsulationKey<P>
+impl<P> Decapsulate<KCiphertext<P>, SharedKey<P>> for KDecapsulationKey<P>
 where
     P: KemCore,
 {
     type Error = <P::DecapsulationKey as Decapsulate<ml_kem::Ciphertext<P>, SharedKey<P>>>::Error;
 
-    fn decapsulate(
-        &self,
-        encapsulated_key: &EncodedCiphertext<P>,
-    ) -> Result<SharedKey<P>, Self::Error> {
+    fn decapsulate(&self, encapsulated_key: &KCiphertext<P>) -> Result<SharedKey<P>, Self::Error> {
         let ek = encapsulated_key.as_fips();
         self.0.decapsulate(ek)
     }
@@ -160,7 +157,7 @@ where
 // ========================================================================== //
 
 #[derive(Debug, PartialEq, PartialOrd)]
-pub struct EncodedCiphertext<P>
+pub struct KCiphertext<P>
 where
     P: KemCore,
 {
@@ -171,7 +168,7 @@ where
 
 // TODO this is likely incorrect / incomplete i just made it this way so it would
 // compile so I could get tests compiling first.
-impl<P> Transcode for EncodedCiphertext<P>
+impl<P> Transcode for KCiphertext<P>
 where
     P: KemCore,
 {

@@ -1,4 +1,12 @@
-use crate::{FieldElement, EncodingSize, fips::Truncate};
+//! This implementation of the compress functionality was drawn from the `RustCrypto`
+//! implementation of ML KEM as compress / decompress functionality is required
+//! for this crate, but is not exposed publicly from `RustCrypto/ml-kem`.
+//! Both the Apache2 and MIT licenses for the `RustCrypto` crate are included in
+//! `docs/licenses/`.
+
+use crate::{fips::Truncate, EncodingSize, FieldElement};
+
+use core::slice::IterMut;
 
 // A convenience trait to allow us to associate some constants with a typenum
 pub trait CompressionFactor: EncodingSize {
@@ -13,7 +21,7 @@ where
     T: EncodingSize,
 {
     const POW2_HALF: u32 = 1 << (T::USIZE - 1);
-    const MASK: u16 = ((1 as u16) << T::USIZE) - 1;
+    const MASK: u16 = ((1_u16) << T::USIZE) - 1;
     const DIV_SHIFT: usize = 34;
     #[allow(clippy::integer_division_remainder_used)]
     const DIV_MUL: u64 = (1 << T::DIV_SHIFT) / FieldElement::Q64;
@@ -23,6 +31,30 @@ where
 pub trait Compress {
     fn compress<D: CompressionFactor>(&mut self) -> &Self;
     fn decompress<D: CompressionFactor>(&mut self) -> &Self;
+}
+
+impl Compress for u16 {
+    // Equation 4.5: Compress_d(x) = round((2^d / q) x)
+    //
+    // Here and in decompression, we leverage the following facts:
+    //
+    //   round(a / b) = floor((a + b/2) / b)
+    //   a / q ~= (a * x) >> s where x >> s ~= 1/q
+    fn compress<D: CompressionFactor>(&mut self) -> &Self {
+        const Q_HALF: u64 = (FieldElement::Q64 + 1) >> 1;
+        let x = u64::from(*self);
+        let y = ((((x << D::USIZE) + Q_HALF) * D::DIV_MUL) >> D::DIV_SHIFT).truncate();
+        *self = y.truncate() & D::MASK;
+        self
+    }
+
+    // Equation 4.6: Decompress_d(x) = round((q / 2^d) x)
+    fn decompress<D: CompressionFactor>(&mut self) -> &Self {
+        let x = u32::from(*self);
+        let y = ((x * FieldElement::Q32) + D::POW2_HALF) >> D::USIZE;
+        *self = y.truncate();
+        self
+    }
 }
 
 impl Compress for FieldElement {
@@ -49,6 +81,22 @@ impl Compress for FieldElement {
     }
 }
 
+impl<'a> Compress for IterMut<'a, u16> {
+    fn compress<D: CompressionFactor>(&mut self) -> &Self {
+        self.for_each(|fe| {
+            fe.compress::<D>();
+        });
+        self
+    }
+
+    fn decompress<D: CompressionFactor>(&mut self) -> &Self {
+        self.for_each(|fe| {
+            fe.decompress::<D>();
+        });
+        self
+    }
+}
+
 #[allow(non_snake_case)]
 #[cfg(test)]
 pub(crate) mod test {
@@ -70,7 +118,7 @@ pub(crate) mod test {
     #[allow(clippy::integer_division_remainder_used)]
     fn compression_decompression_inequality<D: CompressionFactor>() {
         const QI32: i32 = FieldElement::Q as i32;
-        let error_threshold = Ratio::new(FieldElement::Q, 1 << D::USIZE).to_integer() as i32;
+        let error_threshold = i32::from(Ratio::new(FieldElement::Q, 1 << D::USIZE).to_integer());
 
         for x in 0..FieldElement::Q {
             let mut y = FieldElement(x);

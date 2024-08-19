@@ -1,8 +1,8 @@
 pub use crate::mlkem::KEncapsulationKey as EncapsulationKey;
 use crate::{EncodingSize, FieldElement};
 
-use std::io::Error as IoError;
 use core::cmp::min;
+use std::io::Error as IoError;
 
 use ml_kem::KemCore;
 use num_bigint::BigUint;
@@ -64,7 +64,7 @@ where
     dst[..l].copy_from_slice(&b[..l]);
 
     // Sample failure if High order bit is set.
-    Ok(dst[P::T_HAT_LEN-1] & P::MSB_BITMASK == 0)
+    Ok(dst[P::T_HAT_LEN - 1] & P::MSB_BITMASK == 0)
 }
 
 pub fn vector_decode<P>(c: impl AsRef<[u8]>, mut p: impl AsMut<[u16]>) -> Result<(), IoError>
