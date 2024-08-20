@@ -5,13 +5,18 @@
 //! stays up to date for use in this crate. The Apache2 license for the `sorpaas`
 //! crate is included in `docs/licenses/`.
 
+use core::cmp::min;
+
 use digest::{
     block_buffer::Eager,
     core_api::{BlockSizeUser, BufferKindUser, CoreProxy, FixedOutputCore, UpdateCore},
     generic_array::typenum::{IsLess, Le, NonZero, U256},
     HashMarker, OutputSizeUser,
 };
-use generic_array::{ArrayLength, GenericArray};
+use generic_array::{
+    typenum::{U32, U4, U8},
+    ArrayLength, GenericArray,
+};
 use hmac::{Hmac, Mac};
 use rand_core::{CryptoRng, Error, RngCore};
 
@@ -38,6 +43,7 @@ where
 type OutputSize<D> = <<D as CoreProxy>::Core as OutputSizeUser>::OutputSize;
 type BlockSize<D> = <<D as CoreProxy>::Core as BlockSizeUser>::BlockSize;
 
+#[allow(dead_code)]
 impl<D> HmacDRBG<D>
 where
     D: CoreProxy,
@@ -170,16 +176,30 @@ where
     OutputSize<D>: ArrayLength<u8>,
 {
     fn next_u32(&mut self) -> u32 {
-        0_u32
+        let b = self.generate::<U4>(None);
+        u32::from_be_bytes([b[0], b[1], b[2], b[3]])
     }
 
     fn next_u64(&mut self) -> u64 {
-        0_u64
+        let b = self.generate::<U8>(None);
+        u64::from_be_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]])
     }
 
-    fn fill_bytes(&mut self, dest: &mut [u8]) {}
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        let mut generated = 0_usize;
+        while generated < dest.len() {
+            let remaining = dest.len() - generated;
+            let step = min(32, remaining);
+
+            let b = self.generate::<U32>(None);
+            dest[generated..generated + step].copy_from_slice(&b[..step]);
+
+            generated += step;
+        }
+    }
 
     fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Error> {
+        self.fill_bytes(dest);
         Ok(())
     }
 }
@@ -199,4 +219,53 @@ where
     BlockSize<D>: ArrayLength<u8> + IsLess<U256>,
     OutputSize<D>: ArrayLength<u8>,
 {
+}
+
+#[cfg(test)]
+mod test {
+    use generic_array::typenum::U32;
+    use hex::FromHex;
+    use sha2::Sha256;
+
+    use super::*;
+
+    #[test]
+    fn fill_bytes() {
+        let mut drbg = HmacDRBG::<Sha256>::new(
+            "totally random0123456789".as_bytes(),
+            "secret nonce".as_bytes(),
+            "my drbg".as_bytes(),
+        );
+
+        let expected = "018ec5f8e08c41e5ac974eb129ac297c5388ee1864324fa13d9b15cf98d9a1576b16576b47a9f4df549a25d82f1440ac07668b4dafbd8d54493ff20005118a2085431580e28508635e6e4f04a2e7395a4468b99ba8a2722bc70c4dce40d6f80e11052159bd36911cd075163ca91978b9a17f6e25f171649c78e25001ad203259";
+
+        let mut buf = [0u8; 128];
+        drbg.fill_bytes(&mut buf);
+        assert_eq!(expected, hex::encode(buf));
+    }
+
+    #[test]
+    fn basic() {
+        let mut drbg = HmacDRBG::<Sha256>::new(
+            "totally random0123456789".as_bytes(),
+            "secret nonce".as_bytes(),
+            "my drbg".as_bytes(),
+        );
+
+        let expected = [
+            "018ec5f8e08c41e5ac974eb129ac297c5388ee1864324fa13d9b15cf98d9a157",
+            "6b16576b47a9f4df549a25d82f1440ac07668b4dafbd8d54493ff20005118a20",
+            "85431580e28508635e6e4f04a2e7395a4468b99ba8a2722bc70c4dce40d6f80e",
+            "11052159bd36911cd075163ca91978b9a17f6e25f171649c78e25001ad203259",
+        ];
+
+        for x_str in expected {
+            let x_bytes = unhex32(x_str);
+            assert_eq!(drbg.generate::<U32>(None).as_slice(), x_bytes);
+        }
+    }
+
+    fn unhex32(s: &str) -> [u8; 32] {
+        <[u8; 32]>::from_hex(s).expect("provided string must unhex to 32 bytes")
+    }
 }
