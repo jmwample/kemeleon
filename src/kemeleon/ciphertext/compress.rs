@@ -211,6 +211,7 @@ pub(crate) mod test {
 
             impl EncodingSize for $n {
                 const USIZE: usize = $v;
+                const ENCODED_CT_SIZE: usize = 0;
 
                 // these don't matter for these tests.
                 const K: usize = 2;

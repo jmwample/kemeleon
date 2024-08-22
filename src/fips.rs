@@ -11,7 +11,7 @@
 //! properly.
 //!
 
-use crate::{Barr8, EncodingSize, FieldElement, NttArray, ARR_LEN, RHO_LEN};
+use crate::{Barr8, EncodingSize, FipsEncodingSize, FieldElement, NttArray, ARR_LEN, RHO_LEN};
 
 // ========================================================================== //
 // FIPs spec EncapsulationKey Encoding
@@ -130,7 +130,7 @@ fn split_ct(ct: &[u8]) -> (&[u8], &[u8]) {
 #[cfg(test)]
 mod tests {
     use super::{byte_decode, byte_encode};
-    use crate::{EncodingSize, RHO_LEN};
+    use crate::{EncodingSize, FipsEncodingSize, RHO_LEN};
 
     use ml_kem::{Encoded, EncodedSizeUser, KemCore, MlKem1024, MlKem512, MlKem768};
 
@@ -138,7 +138,7 @@ mod tests {
     where
         D: KemCore + EncodingSize,
         [(); <D as EncodingSize>::K]:,
-        [(); <D as EncodingSize>::FIPS_ENCODED_SIZE]:,
+        [(); <D as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
     {
         let mut rng = rand::thread_rng();
         let (_, ek) = D::generate(&mut rng);

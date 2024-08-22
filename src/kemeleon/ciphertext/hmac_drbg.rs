@@ -4,6 +4,18 @@
 //! been updated in 4 years, so this seems like a better way to make sure this
 //! stays up to date for use in this crate. The Apache2 license for the `sorpaas`
 //! crate is included in `docs/licenses/`.
+//!
+//! # Modifications
+//! - [x] Update dependencies
+//! - [x] implement RngCore for `HmacDRBG`
+//! - [ ] **TODO**: Make reading bytes consistent.
+//!   - Right now a read creates a block and
+//! throws away any unused bytes. This means that if you constantly call `next_u32`
+//! you will get nea new block every time even though you are only using 4 bytes
+//! of the block, So the bytes you get would be a subset of the ones you get
+//! from just reading into a large [u8]. This could be fixed by keeping track
+//! of how many bytes are remaining in the current block before updating.
+//!   - Does this contradict the HMAC DRBG RFC?
 
 use core::cmp::min;
 
@@ -14,7 +26,7 @@ use digest::{
     HashMarker, OutputSizeUser,
 };
 use generic_array::{
-    typenum::{U32, U4, U8},
+    typenum::{U4, U8},
     ArrayLength, GenericArray,
 };
 use hmac::{Hmac, Mac};
@@ -108,10 +120,10 @@ where
             vmac.update(&self.v);
             self.v = vmac.finalize().into_bytes();
 
-            for j in 0..self.v.len() {
-                result[i + j] = self.v[j];
-            }
-            i += self.v.len();
+            let cp_len = min(self.v.len(), result.len()-i);
+            result[i .. i+cp_len].copy_from_slice(&self.v[..cp_len]);
+
+            i += cp_len;
         }
 
         match add {
@@ -186,16 +198,7 @@ where
     }
 
     fn fill_bytes(&mut self, dest: &mut [u8]) {
-        let mut generated = 0_usize;
-        while generated < dest.len() {
-            let remaining = dest.len() - generated;
-            let step = min(32, remaining);
-
-            let b = self.generate::<U32>(None);
-            dest[generated..generated + step].copy_from_slice(&b[..step]);
-
-            generated += step;
-        }
+        self.generate_to_slice(dest, None);
     }
 
     fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Error> {
@@ -237,7 +240,7 @@ mod test {
             "my drbg".as_bytes(),
         );
 
-        let expected = "018ec5f8e08c41e5ac974eb129ac297c5388ee1864324fa13d9b15cf98d9a1576b16576b47a9f4df549a25d82f1440ac07668b4dafbd8d54493ff20005118a2085431580e28508635e6e4f04a2e7395a4468b99ba8a2722bc70c4dce40d6f80e11052159bd36911cd075163ca91978b9a17f6e25f171649c78e25001ad203259";
+        let expected = "018ec5f8e08c41e5ac974eb129ac297c5388ee1864324fa13d9b15cf98d9a15758e54bbc5c30b5e212e5d14376614d9a7fae84ab62352302a50f37581283b0b97fb723e3790e4364e03e2f9745157ac639ddf121c12b489a1e2a879ca434aa4f75555649de5e17c3c6e1fb866e9f7db463da1e03d0e962c1a9322f2eff4959aa";
 
         let mut buf = [0u8; 128];
         drbg.fill_bytes(&mut buf);
@@ -267,5 +270,32 @@ mod test {
 
     fn unhex32(s: &str) -> [u8; 32] {
         <[u8; 32]>::from_hex(s).expect("provided string must unhex to 32 bytes")
+    }
+
+    #[test]
+    fn consistency() {
+        let mut drbg = HmacDRBG::<Sha256>::new(
+            "totally random0123456789".as_bytes(),
+            "secret nonce".as_bytes(),
+            "my drbg".as_bytes(),
+        );
+
+        let mut buf = [0u8; 32];
+        drbg.fill_bytes(&mut buf);
+
+
+        let mut drbg = HmacDRBG::<Sha256>::new(
+            "totally random0123456789".as_bytes(),
+            "secret nonce".as_bytes(),
+            "my drbg".as_bytes(),
+        );
+
+        let mut buf1 = [0u8; 32];
+        for i in 0..8 {
+            let b = drbg.next_u32().to_be_bytes();
+            buf1[i*4 .. (i*4)+4].copy_from_slice(&b[0..4]);
+        }
+
+
     }
 }

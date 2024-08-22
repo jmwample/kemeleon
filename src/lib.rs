@@ -158,19 +158,29 @@ pub trait EncodingSize {
     const T_HAT_LEN: usize;
     /// Size of the Kemeleon encoded string as bytes. $ `T_HAT_LEN` + `RHO_LEN` $
     const ENCODED_SIZE: usize = Self::T_HAT_LEN + RHO_LEN;
-    /// Number of bytes required to represent the FIPS encoded Encapsulation Key
-    const FIPS_ENCODED_SIZE: usize = RHO_LEN + Self::K * 12 * 32;
 
-    const CT_VSIZE: usize = Self::DV * 32;
-    const CT_USIZE: usize = Self::DU * 32 * Self::K;
-    const CT_SIZE: usize = Self::CT_USIZE + Self::CT_VSIZE;
+    const ENCODED_USIZE: usize = 0;
+    const ENCODED_VSIZE: usize = 32 * Self::DV;
+    const ENCODED_CT_SIZE: usize;
 }
+
+
+trait FipsEncodingSize: EncodingSize {
+    const FIPS_T_HAT_LEN: usize = Self::K * 12 * 32;
+    const FIPS_ENCODED_SIZE: usize = Self::FIPS_T_HAT_LEN + RHO_LEN;
+
+    const FIPS_ENCODED_USIZE: usize = 32 * (Self::DU * Self::K);
+    const FIPS_ENCODED_VSIZE: usize = 32 * Self::DV;
+    const FIPS_ENCODED_CT_SIZE: usize = Self::FIPS_ENCODED_USIZE + Self::FIPS_ENCODED_VSIZE;
+}
+impl<T: EncodingSize> FipsEncodingSize for T {}
 
 impl EncodingSize for ml_kem::MlKem512 {
     const K: usize = 2;
 
     const T_HAT_LEN: usize = 749;
     const MSB_BITMASK: u8 = 0b1100_0000;
+    const ENCODED_CT_SIZE: usize = 877;
 
     const DU: usize = 10;
     const DV: usize = 4;
@@ -181,6 +191,7 @@ impl EncodingSize for ml_kem::MlKem768 {
 
     const T_HAT_LEN: usize = 1124;
     const MSB_BITMASK: u8 = 0b1111_1100;
+    const ENCODED_CT_SIZE: usize = 1252;
 
     const DU: usize = 10;
     const DV: usize = 4;
@@ -191,6 +202,7 @@ impl EncodingSize for ml_kem::MlKem1024 {
 
     const T_HAT_LEN: usize = 1498;
     const MSB_BITMASK: u8 = 0b1110_0000;
+    const ENCODED_CT_SIZE: usize = 1658;
 
     const DU: usize = 11;
     const DV: usize = 5;

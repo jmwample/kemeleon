@@ -1,5 +1,5 @@
 use super::{vector_decode, vector_encode, EncapsulationKey, Encodable, Encode};
-use crate::{fips, Barr8, EncodingSize, ARR_LEN, RHO_LEN};
+use crate::{fips, Barr8, EncodingSize, FipsEncodingSize , ARR_LEN, RHO_LEN};
 
 use std::io::Error as IoError;
 
@@ -11,12 +11,11 @@ use ml_kem::{EncodedSizeUser, KemCore};
 
 impl<P> Encode for EncapsulationKey<P>
 where
-    P: KemCore + EncodingSize,
-    [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+    P: KemCore + EncodingSize + FipsEncodingSize,
+    [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
     [(); <P as EncodingSize>::ENCODED_SIZE]:,
     [(); <P as EncodingSize>::K]:,
 {
-    type EK = Self;
     type ET = Barr8<{ <P as EncodingSize>::ENCODED_SIZE }>;
     type Error = IoError;
 
@@ -50,15 +49,15 @@ where
     ///     3     a[𝑖] ← ( 𝑟− sum(𝑗=1, 𝑖−1, 𝑝𝑘 [𝑗]) ) / ( 𝑞^(𝑖−1) ) mod 𝑞
     ///     4 return a
     /// ```
-    fn try_from_bytes(c: impl AsRef<[u8]>) -> Result<Self::EK, Self::Error> {
+    fn try_from_bytes(c: impl AsRef<[u8]>) -> Result<Self, Self::Error> {
         EncapsulationKey::<P>::decode_priv(c.as_ref())
     }
 }
 
 impl<P> Encodable for EncapsulationKey<P>
 where
-    P: KemCore + EncodingSize,
-    [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+    P: KemCore + EncodingSize + FipsEncodingSize,
+    [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
     [(); <P as EncodingSize>::ENCODED_SIZE]:,
     [(); <P as EncodingSize>::K]:,
 {
@@ -70,8 +69,8 @@ where
 
 impl<P> EncapsulationKey<P>
 where
-    P: KemCore + EncodingSize,
-    [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+    P: KemCore + EncodingSize + FipsEncodingSize,
+    [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
     [(); <P as EncodingSize>::ENCODED_SIZE]:,
     [(); <P as EncodingSize>::K]:,
 {
@@ -136,14 +135,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{mlkem::Kemx, FieldElement};
+    use crate::{mlkem::Kemx, FieldElement, FipsEncodingSize};
     use ml_kem::{Encoded, MlKem1024, MlKem512, MlKem768};
     use num_bigint::BigUint;
 
     fn entropy_check<P>()
     where
-        P: KemCore + EncodingSize,
-        [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+        P: KemCore + EncodingSize + FipsEncodingSize,
+        [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
         [(); <P as EncodingSize>::ENCODED_SIZE]:,
         [(); <P as EncodingSize>::K]:,
     {
@@ -176,8 +175,8 @@ mod tests {
     #[allow(clippy::cast_possible_wrap)]
     fn sample_boundary_check<P>()
     where
-        P: KemCore + EncodingSize,
-        [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+        P: KemCore + EncodingSize + FipsEncodingSize,
+        [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
         [(); <P as EncodingSize>::ENCODED_SIZE]:,
         [(); <P as EncodingSize>::K]:,
     {
@@ -222,8 +221,8 @@ mod tests {
 
     fn consistency_check<P>()
     where
-        P: KemCore + EncodingSize,
-        [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+        P: KemCore + EncodingSize + FipsEncodingSize,
+        [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
         [(); <P as EncodingSize>::ENCODED_SIZE]:,
         [(); <P as EncodingSize>::K]:,
     {
@@ -253,7 +252,7 @@ mod tests {
     fn value_check<P>(b: &[u8], v: &BigUint, description: &str)
     where
         P: KemCore + EncodingSize,
-        [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+        [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
         [(); <P as EncodingSize>::ENCODED_SIZE]:,
         [(); <P as EncodingSize>::K]:,
     {
@@ -271,8 +270,8 @@ mod tests {
     // make sure specific values map in the way we expect them to.
     fn specific_values_trial<P>()
     where
-        P: KemCore + EncodingSize,
-        [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+        P: KemCore + EncodingSize + FipsEncodingSize,
+        [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
         [(); <P as EncodingSize>::ENCODED_SIZE]:,
         [(); <P as EncodingSize>::K]:,
     {
@@ -347,8 +346,8 @@ mod tests {
 
     fn encode_decode_trial<P>()
     where
-        P: KemCore + EncodingSize,
-        [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+        P: KemCore + EncodingSize + FipsEncodingSize,
+        [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
         [(); <P as EncodingSize>::ENCODED_SIZE]:,
         [(); <P as EncodingSize>::K]:,
     {

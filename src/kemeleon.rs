@@ -1,5 +1,5 @@
 pub use crate::mlkem::KEncapsulationKey as EncapsulationKey;
-use crate::{EncodingSize, FieldElement};
+use crate::{EncodingSize, FipsEncodingSize, FieldElement};
 
 use core::cmp::min;
 use std::io::Error as IoError;
@@ -10,9 +10,10 @@ use num_bigint::BigUint;
 mod ciphertext;
 mod encapsulation_key;
 
-pub trait Encode {
-    /// Encapsulation Key Type
-    type EK;
+pub trait Encode
+where
+    Self: Sized,
+{
     /// Encoded type (i.e Encoded Encapsulation Key, or Encoded Ciphertext)
     type ET;
 
@@ -26,7 +27,7 @@ pub trait Encode {
     /// # Errors
     /// - length error: input ciphertext is the wrong size
     ///
-    fn try_from_bytes(c: impl AsRef<[u8]>) -> Result<Self::EK, Self::Error>;
+    fn try_from_bytes(c: impl AsRef<[u8]>) -> Result<Self, Self::Error>;
 }
 
 pub trait Encodable: Encode {
