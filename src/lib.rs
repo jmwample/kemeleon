@@ -6,9 +6,15 @@
 // do not warn about downcasting
 // #![deny(missing_docs)] // Require all public interfaces to be documented
 
-//! Implementation of Kemeleon Encodings
+//! # Kemeleon: Obfuscated ML-KEM Encodings
 //!
 //! [Paper](https://eprint.iacr.org/2024/1086.pdf).
+//!
+//! ## ⚠️ Security Warning
+//! 
+//! The implementation contained in this crate has never been independently audited!
+//! 
+//! **USE AT YOUR OWN RISK!**
 //!
 //! ## Usage
 //!
@@ -66,6 +72,21 @@
 //! Kemeleon.DecodeCtxt(r):
 //!
 //! ```
+//! 
+//! ## Minimum Supported Rust Version (MSRV)
+//!
+//! The Minimum Supported Rust Versions (MSRV) for this crate will be listed
+//! here (TODO). This version will be ensured by the test and build steps in the
+//! CI pipeline.
+//! 
+//! The MSRV can be changed in the future, but it will be done with a minor
+//! version bump. We will not increase MSRV on PATCH releases, though
+//! downstream dependencies might.
+//! 
+//! We won't increase MSRV just because we can: we'll only do so when we have a
+//! reason. (We don't guarantee that you'll agree with our reasoning; only that
+//! it will exist.)
+//! 
 #![feature(generic_const_exprs)]
 
 use core::fmt::Debug;
@@ -132,31 +153,48 @@ pub trait Transcode {
 // Encoding Sizes and Generics
 // ========================================================================== //
 
+/// Core sizes used for encoding ML KEM Encapsulation Keys and Ciphertexts.
+///
+/// Many of the Arrray Sizes defined here are based off of the length of
+/// the result of a Kemeleon `VectorEncode()` function. For a vector of 
+/// `K` Field elements with $n=256$ values per field element this is found
+/// by:
+///
+/// $$
+/// HIGH\\\_ORDER\\\_BIT = \left\lceil log_{2}(q^{n\cdot k}+1) - 1 \right\rceil
+/// $$
+///
 pub trait EncodingSize {
     /// Number of bits used to represent field elements
-    const USIZE: usize = 12;
+    const USIZE: usize = 12_usize;
 
-    const VALUE_STEP: usize = 2;
-    const BYTE_STEP: usize = 3;
+    const VALUE_STEP: usize = 2_usize;
+    const BYTE_STEP: usize = 3_usize;
 
     /// Number of field elements per equation.
     const K: usize;
 
     /// Bitmask for the high order byte which will be less than a full byte of
     /// random bits when encoded.
+    ///
+    /// Computed as: $(HIGH\\_ORDER\\_BIT -1)\ mod\ 8$
     const MSB_BITMASK: u8;
     /// Bitmask for the high order byte which will be less than a full byte of
     /// random bits when encoded. Inversion of [`EncodingSize::MSB_BITMASK`].
     const MSB_BITMASK_INV: u8 = !Self::MSB_BITMASK;
 
+    /// The bit width of encoded integers in the `u` vector in a ciphertext
     const DU: usize;
+    /// The bit width of encoded integers in the `v` vector in a ciphertext
     const DV: usize;
 
     /// Number of bytes for just `t_hat` values in a kemeleon encoded value
     ///
-    /// $\left\lceil (log_{2}(q^{n\cdot k}) - 1)/8 \right\rceil$
+    /// Computed as: $\left\lceil (HIGH\\_ORDER\\_BIT -1)/8 \right\rceil$
     const T_HAT_LEN: usize;
-    /// Size of the Kemeleon encoded string as bytes. $ `T_HAT_LEN` + `RHO_LEN` $
+    /// Size of the Kemeleon encoded string as bytes.
+    ///
+    /// Computed as: $T\\_HAT\\_LEN + RHO\\_LEN$
     const ENCODED_SIZE: usize = Self::T_HAT_LEN + RHO_LEN;
 
     /// Size of the U value of the kemeleon encoded ciphertext. Matches `T_HAT_LEN`.
