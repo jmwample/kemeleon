@@ -128,10 +128,10 @@ pub trait Transcode {
 
 pub trait EncodingSize {
     /// Number of bits used to represent field elements
-    const USIZE: usize = 12;
+    const USIZE: usize = 12_usize;
 
-    const VALUE_STEP: usize = 2;
-    const BYTE_STEP: usize = 3;
+    const VALUE_STEP: usize = 2_usize;
+    const BYTE_STEP: usize = 3_usize;
 
     /// Number of field elements per equation.
     const K: usize;
@@ -140,10 +140,12 @@ pub trait EncodingSize {
     /// representation. Used to determine if the encoded key satisfies the sampling
     /// strategy.
     ///
-    /// Computed as $\left\lceil log_{2}(q^{n\cdot k}+1) - 1 \right\rceil$
+    /// Computed as: $\left\lceil log_{2}(q^{n\cdot k}+1) - 1 \right\rceil$
     const HIGH_ORDER_BIT: u64;
     /// Bitmask for the high order byte which will be less than a full byte of
-    /// random bits when encoded. $(HIGH\_ORDER\_BIT -1)\ mod\ 8$
+    /// random bits when encoded.
+    ///
+    /// Computed as: $(HIGH\\_ORDER\\_BIT -1)\ mod\ 8$
     const MSB_BITMASK: u8;
     /// Bitmask for the high order byte which will be less than a full byte of
     /// random bits when encoded. Inversion of [`EncodingSize::MSB_BITMASK`].
@@ -155,8 +157,12 @@ pub trait EncodingSize {
     const DV: usize;
 
     /// Number of bytes for just `t_hat` values in a kemeleon encoded value
+    ///
+    /// Computed as: $\left\lceil (HIGH\\_ORDER\\_BIT -1)/8 \right\rceil$
     const T_HAT_LEN: usize;
-    /// Size of the Kemeleon encoded string as bytes. $\left\lceil (HIGH\_ORDER\_BIT -1)/8 \right\rceil$
+    /// Size of the Kemeleon encoded string as bytes.
+    ///
+    /// Computed as: $T\\_HAT\\_LEN + RHO\\_LEN$
     const ENCODED_SIZE: usize = Self::T_HAT_LEN + RHO_LEN;
     /// Number of bytes required to represent the object when not encoded
     const UNENCODED_SIZE: usize = RHO_LEN + ARR_LEN * Self::K;
