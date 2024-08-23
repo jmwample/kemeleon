@@ -7,9 +7,9 @@ use std::io::Error as IoError;
 use byteorder::BigEndian;
 use byteorder::WriteBytesExt;
 use ml_kem::KemCore;
+use rand::{CryptoRng, RngCore};
 use rand_core::CryptoRngCore;
 use sha2::Sha256;
-use rand::{CryptoRng, RngCore};
 
 mod compress;
 use compress::Compress;
@@ -104,7 +104,10 @@ where
     [(); P::ENCODED_CT_SIZE]:,
     [(); P::FIPS_ENCODED_SIZE]:,
 {
-    pub(crate) fn new(fips_ct: &ml_kem::Ciphertext<P>, ss: &ml_kem::SharedKey<P>) -> Result<(bool, Self), IoError> {
+    pub(crate) fn new(
+        fips_ct: &ml_kem::Ciphertext<P>,
+        ss: &ml_kem::SharedKey<P>,
+    ) -> Result<(bool, Self), IoError> {
         let mut kemeleon_ct = Self {
             encoded: false,
             bytes: vec![],
@@ -119,7 +122,10 @@ where
         Ok((encodable, kemeleon_ct))
     }
 
-    fn new_from_rng<R: RngCore + CryptoRng>(fips_ct: &ml_kem::Ciphertext<P>, rng: &mut R) -> Result<(bool, Self), IoError> {
+    fn new_from_rng<R: RngCore + CryptoRng>(
+        fips_ct: &ml_kem::Ciphertext<P>,
+        rng: &mut R,
+    ) -> Result<(bool, Self), IoError> {
         let mut kemeleon_ct = Self {
             encoded: false,
             bytes: vec![],
@@ -164,7 +170,8 @@ where
 
 fn u16_to_u8(x16: &[u16]) -> Vec<u8> {
     let mut out = Vec::with_capacity(x16.len() * 2);
-    x16.iter().for_each(|&x| out.write_u16::<BigEndian>(x).unwrap());
+    x16.iter()
+        .for_each(|&x| out.write_u16::<BigEndian>(x).unwrap());
     out
 }
 
@@ -199,7 +206,7 @@ where
     )
 }
 
-fn concat_ct<P>(u: &[u8], v:&[u8]) -> [u8; P::ENCODED_CT_SIZE]
+fn concat_ct<P>(u: &[u8], v: &[u8]) -> [u8; P::ENCODED_CT_SIZE]
 where
     P: EncodingSize,
     [(); P::ENCODED_CT_SIZE]:,
@@ -210,7 +217,7 @@ where
     out
 }
 
-fn concat_fips_ct<P>(u: &[u8], v:&[u8]) -> [u8; P::FIPS_ENCODED_CT_SIZE]
+fn concat_fips_ct<P>(u: &[u8], v: &[u8]) -> [u8; P::FIPS_ENCODED_CT_SIZE]
 where
     P: EncodingSize,
     [(); P::FIPS_ENCODED_CT_SIZE]:,

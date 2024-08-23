@@ -1,5 +1,5 @@
 use super::{vector_decode, vector_encode, EncapsulationKey, Encodable, Encode};
-use crate::{fips, Barr8, EncodingSize, FipsEncodingSize , ARR_LEN, RHO_LEN};
+use crate::{fips, Barr8, EncodingSize, FipsEncodingSize, ARR_LEN, RHO_LEN};
 
 use std::io::Error as IoError;
 

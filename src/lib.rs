@@ -11,9 +11,9 @@
 //! [Paper](https://eprint.iacr.org/2024/1086.pdf).
 //!
 //! ## ⚠️ Security Warning
-//! 
+//!
 //! The implementation contained in this crate has never been independently audited!
-//! 
+//!
 //! **USE AT YOUR OWN RISK!**
 //!
 //! ## Usage
@@ -72,21 +72,21 @@
 //! Kemeleon.DecodeCtxt(r):
 //!
 //! ```
-//! 
+//!
 //! ## Minimum Supported Rust Version (MSRV)
 //!
 //! The Minimum Supported Rust Versions (MSRV) for this crate will be listed
 //! here (TODO). This version will be ensured by the test and build steps in the
 //! CI pipeline.
-//! 
+//!
 //! The MSRV can be changed in the future, but it will be done with a minor
 //! version bump. We will not increase MSRV on PATCH releases, though
 //! downstream dependencies might.
-//! 
+//!
 //! We won't increase MSRV just because we can: we'll only do so when we have a
 //! reason. (We don't guarantee that you'll agree with our reasoning; only that
 //! it will exist.)
-//! 
+//!
 #![feature(generic_const_exprs)]
 
 use core::fmt::Debug;
@@ -156,7 +156,7 @@ pub trait Transcode {
 /// Core sizes used for encoding ML KEM Encapsulation Keys and Ciphertexts.
 ///
 /// Many of the Arrray Sizes defined here are based off of the length of
-/// the result of a Kemeleon `VectorEncode()` function. For a vector of 
+/// the result of a Kemeleon `VectorEncode()` function. For a vector of
 /// `K` Field elements with $n=256$ values per field element this is found
 /// by:
 ///
@@ -205,7 +205,6 @@ pub trait EncodingSize {
     /// Size of the combined kemeleon encoded ciphertext.
     const ENCODED_CT_SIZE: usize = Self::ENCODED_USIZE + Self::ENCODED_VSIZE;
 }
-
 
 trait FipsEncodingSize: EncodingSize {
     const FIPS_T_HAT_LEN: usize = Self::K * 12 * 32;

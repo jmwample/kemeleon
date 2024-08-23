@@ -114,7 +114,7 @@ where
             let (success, ct) = KCiphertext::<P>::new(&ek, &ss)?;
 
             if !success {
-                continue
+                continue;
             }
 
             let mut vec_todo = [0u8; P::ENCODED_CT_SIZE];
@@ -161,7 +161,7 @@ where
     pub(crate) fips: Ciphertext<P>,
 }
 
-pub struct KEncodedCiphertext<P>(pub(crate) [u8; P::ENCODED_CT_SIZE ])
+pub struct KEncodedCiphertext<P>(pub(crate) [u8; P::ENCODED_CT_SIZE])
 where
     P: KemCore + EncodingSize,
     [(); P::ENCODED_CT_SIZE]:;
@@ -199,8 +199,9 @@ where
     fn decapsulate(&self, ciphertext: &KEncodedCiphertext<P>) -> Result<SharedKey<P>, Self::Error> {
         let ct = KCiphertext::decode(ciphertext)?;
         let k_send = ct.fips;
-        self.0.decapsulate(&k_send)
-            .map_err(|e| IoError::other( format!("failed to decapsulate: {e:?}") ) )
+        self.0
+            .decapsulate(&k_send)
+            .map_err(|e| IoError::other(format!("failed to decapsulate: {e:?}")))
     }
 }
 

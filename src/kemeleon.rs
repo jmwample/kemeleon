@@ -1,5 +1,5 @@
 pub use crate::mlkem::KEncapsulationKey as EncapsulationKey;
-use crate::{EncodingSize, FipsEncodingSize, FieldElement};
+use crate::{EncodingSize, FieldElement, FipsEncodingSize};
 
 use core::cmp::min;
 use std::io::Error as IoError;

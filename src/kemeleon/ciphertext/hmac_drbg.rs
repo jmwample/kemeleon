@@ -120,8 +120,8 @@ where
             vmac.update(&self.v);
             self.v = vmac.finalize().into_bytes();
 
-            let cp_len = min(self.v.len(), result.len()-i);
-            result[i .. i+cp_len].copy_from_slice(&self.v[..cp_len]);
+            let cp_len = min(self.v.len(), result.len() - i);
+            result[i..i + cp_len].copy_from_slice(&self.v[..cp_len]);
 
             i += cp_len;
         }
@@ -283,7 +283,6 @@ mod test {
         let mut buf = [0u8; 32];
         drbg.fill_bytes(&mut buf);
 
-
         let mut drbg = HmacDRBG::<Sha256>::new(
             "totally random0123456789".as_bytes(),
             "secret nonce".as_bytes(),
@@ -293,9 +292,7 @@ mod test {
         let mut buf1 = [0u8; 32];
         for i in 0..8 {
             let b = drbg.next_u32().to_be_bytes();
-            buf1[i*4 .. (i*4)+4].copy_from_slice(&b[0..4]);
+            buf1[i * 4..(i * 4) + 4].copy_from_slice(&b[0..4]);
         }
-
-
     }
 }
