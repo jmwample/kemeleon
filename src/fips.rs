@@ -34,8 +34,9 @@ pub(crate) fn byte_encode<D, const USIZE: usize>(
     );
 
     // TODO XXX: these depend on the value of USIZE
-    let val_step = D::VALUE_STEP;
-    let byte_step = D::BYTE_STEP;
+    let y = (USIZE * 8) / gcd(USIZE, 8);
+    let val_step = y / USIZE;
+    let byte_step = y / 8;
 
     let vc = ntt_vals.as_flattened().chunks(val_step);
     let bc = bytes[..idx].chunks_mut(byte_step);
@@ -48,6 +49,17 @@ pub(crate) fn byte_encode<D, const USIZE: usize>(
         let xb = x.to_le_bytes();
         b.copy_from_slice(&xb[..byte_step]);
     }
+}
+
+fn gcd(x: usize, y: usize) -> usize {
+    let mut x = x;
+    let mut y = y;
+    while y != 0 {
+        let t = y;
+        y = x % y;
+        x = t;
+    }
+    x
 }
 
 // Algorithm 5 ByteDecode_d(F)
