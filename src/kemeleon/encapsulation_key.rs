@@ -15,6 +15,7 @@ where
     [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
     [(); <P as EncodingSize>::ENCODED_SIZE]:,
     [(); <P as EncodingSize>::K]:,
+    [(); P::USIZE]:,
 {
     type ET = Barr8<{ <P as EncodingSize>::ENCODED_SIZE }>;
     type Error = IoError;
@@ -60,6 +61,7 @@ where
     [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
     [(); <P as EncodingSize>::ENCODED_SIZE]:,
     [(); <P as EncodingSize>::K]:,
+    [(); P::USIZE]:,
 {
     fn satisfies_sampling(&self) -> bool {
         let mut dst = [0u8; <P as EncodingSize>::ENCODED_SIZE];
@@ -73,6 +75,7 @@ where
     [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
     [(); <P as EncodingSize>::ENCODED_SIZE]:,
     [(); <P as EncodingSize>::K]:,
+    [(); P::USIZE]:,
 {
     fn decode_priv(c: impl AsRef<[u8]>) -> Result<Self, IoError> {
         if c.as_ref().len() < P::ENCODED_SIZE {
@@ -110,7 +113,7 @@ where
         }
 
         let vals_fips_encoded = self.key.as_bytes().to_vec();
-        let (rho, vals) = fips::byte_decode::<P>(vals_fips_encoded);
+        let (rho, vals) = fips::ek_decode::<P>(vals_fips_encoded);
 
         let sample_success = vector_encode(vals.as_flattened(), &mut k[..P::T_HAT_LEN])?;
 
@@ -145,6 +148,7 @@ mod tests {
         [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
         [(); <P as EncodingSize>::ENCODED_SIZE]:,
         [(); <P as EncodingSize>::K]:,
+        [(); P::USIZE]:,
     {
         let ek_kb = [0xff; P::ENCODED_SIZE];
         let ek = EncapsulationKey::<P>::try_from_bytes(ek_kb).expect("failed to parse key");
@@ -179,11 +183,12 @@ mod tests {
         [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
         [(); <P as EncodingSize>::ENCODED_SIZE]:,
         [(); <P as EncodingSize>::K]:,
+        [(); P::USIZE]:,
     {
         let ek_kb = [0xff_u8; P::ENCODED_SIZE];
         let max_ek_k = EncapsulationKey::decode_priv(ek_kb).unwrap();
         let ek_fips_b = max_ek_k.key.as_bytes();
-        let (rho, max_ntt_vals) = fips::byte_decode(ek_fips_b);
+        let (rho, max_ntt_vals) = fips::ek_decode(ek_fips_b);
 
         for k in -2_i16..3 {
             // Adjust the key such that the kemeleon encoded value is `k in [-2..3]` off
@@ -225,6 +230,7 @@ mod tests {
         [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
         [(); <P as EncodingSize>::ENCODED_SIZE]:,
         [(); <P as EncodingSize>::K]:,
+        [(); P::USIZE]:,
     {
         let mut rng = rand::thread_rng();
         // This is the repeated-trial generate function and any key created
@@ -255,6 +261,7 @@ mod tests {
         [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
         [(); <P as EncodingSize>::ENCODED_SIZE]:,
         [(); <P as EncodingSize>::K]:,
+        [(); P::USIZE]:,
     {
         let encoded = Encoded::<P::EncapsulationKey>::try_from(b).unwrap();
         let key = EncapsulationKey::<P> {
@@ -274,6 +281,7 @@ mod tests {
         [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
         [(); <P as EncodingSize>::ENCODED_SIZE]:,
         [(); <P as EncodingSize>::K]:,
+        [(); P::USIZE]:,
     {
         let zero = [0u8; P::FIPS_ENCODED_SIZE];
         value_check(&zero, &BigUint::ZERO, "zero");
@@ -350,6 +358,7 @@ mod tests {
         [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
         [(); <P as EncodingSize>::ENCODED_SIZE]:,
         [(); <P as EncodingSize>::K]:,
+        [(); P::USIZE]:,
     {
         let mut rng = rand::thread_rng();
         // This is the repeated trial generate from random and any key created

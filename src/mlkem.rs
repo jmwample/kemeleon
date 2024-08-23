@@ -28,6 +28,7 @@ where
     [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
     [(); <P as EncodingSize>::ENCODED_SIZE]:,
     [(); <P as EncodingSize>::K]:,
+    [(); P::USIZE]:,
 {
     pub fn generate(rng: &mut impl CryptoRngCore) -> (KDecapsulationKey<P>, KEncapsulationKey<P>) {
         // random u8 for the most significant byte which will be less than 8 bits.
@@ -70,11 +71,12 @@ impl<P> KEncapsulationKey<P>
 where
     P: KemCore + EncodingSize,
     [(); P::FIPS_ENCODED_SIZE]:,
+    [(); P::USIZE]:,
 {
     // TODO: must use for now -- not sure it this will stay
     #[must_use]
     pub fn from_parts(t_hat: &[[u16; ARR_LEN]; P::K], rho: &[u8; 32], mask_byte: u8) -> Self {
-        let ek_fb = fips::byte_encode(rho, t_hat);
+        let ek_fb = fips::ek_encode(rho, t_hat);
         Self::from_fips_bytes(ek_fb, mask_byte)
     }
 
@@ -193,6 +195,8 @@ where
     [(); P::ENCODED_SIZE]:,
     [(); P::ENCODED_CT_SIZE]:,
     [(); P::FIPS_ENCODED_SIZE]:,
+    [(); P::FIPS_ENCODED_USIZE]:,
+    [(); P::FIPS_ENCODED_CT_SIZE]:,
 {
     type Error = IoError; //<P::DecapsulationKey as Decapsulate<ml_kem::Ciphertext<P>, SharedKey<P>>>::Error;
 
@@ -216,9 +220,12 @@ mod test {
         P: ml_kem::KemCore + EncodingSize,
         [(); P::K]:,
         [(); P::DU]:,
+        [(); P::USIZE]:,
         [(); P::ENCODED_SIZE]:,
         [(); P::ENCODED_CT_SIZE]:,
         [(); P::FIPS_ENCODED_SIZE]:,
+        [(); P::FIPS_ENCODED_USIZE]:,
+        [(); P::FIPS_ENCODED_CT_SIZE]:,
     {
         let mut rng = rand::thread_rng();
         let (dk, ek) = Kemx::<P>::generate(&mut rng);

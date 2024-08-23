@@ -13,36 +13,27 @@
 
 use crate::{Barr8, EncodingSize, FieldElement, FipsEncodingSize, NttArray, ARR_LEN, RHO_LEN};
 
-// ========================================================================== //
-// FIPs spec EncapsulationKey Encoding
-// ========================================================================== //
-
 // Algorithm 4 ByteEncode_d(F)
 //
 // Note: This algorithm performs compression as well as encoding.
-pub(crate) fn byte_encode<D>(
-    rho: &[u8; 32],
+pub(crate) fn byte_encode<D, const USIZE: usize>(
     ntt_vals: &NttArray<{ D::K }>,
-) -> Barr8<{ D::FIPS_ENCODED_SIZE }>
-where
-    D: EncodingSize,
-{
-    let mut bytes = [0u8; D::FIPS_ENCODED_SIZE];
-    let idx = D::FIPS_ENCODED_SIZE - RHO_LEN;
-    bytes[idx..].copy_from_slice(&rho[..]);
-
-    byte_encode_values(ntt_vals, &mut bytes[..idx]);
-    bytes
-}
-
-pub(crate) fn byte_encode_values<D>(ntt_vals: &NttArray<{ D::K }>, mut dst: impl AsMut<[u8]>)
-where
+    mut dst: impl AsMut<[u8]>,
+) where
     D: EncodingSize,
 {
     let bytes = dst.as_mut();
-    let idx = D::FIPS_ENCODED_SIZE - RHO_LEN;
-    // bytes[idx..].copy_from_slice(&rho[..]);
+    let idx = USIZE * D::K * 256 / 8;
 
+    assert_eq!(
+        bytes.len(),
+        idx,
+        "incorrect dst len {} != {idx}  K:{}",
+        bytes.len(),
+        D::K
+    );
+
+    // TODO XXX: these depend on the value of USIZE
     let val_step = D::VALUE_STEP;
     let byte_step = D::BYTE_STEP;
 
@@ -51,33 +42,29 @@ where
     for (v, b) in vc.zip(bc) {
         let mut x = 0u128;
         for (j, vj) in v.iter().enumerate() {
-            x |= u128::from(*vj) << (D::USIZE * j);
+            x |= u128::from(*vj) << (USIZE * j);
         }
 
         let xb = x.to_le_bytes();
         b.copy_from_slice(&xb[..byte_step]);
     }
 }
+
 // Algorithm 5 ByteDecode_d(F)
 //
 // Note: This function performs decompression as well as decoding.
-pub(crate) fn byte_decode<D: EncodingSize>(
+pub(crate) fn byte_decode<D: EncodingSize, const USIZE: usize>(
     bytes: impl AsRef<[u8]>,
-) -> ([u8; 32], NttArray<{ D::K }>) {
-    //TODO: Lenth check on input for safety?
-
-    let mut rho = [0u8; RHO_LEN];
-    let idx = bytes.as_ref().len() - RHO_LEN;
-    rho.copy_from_slice(&bytes.as_ref()[idx..]);
-
+) -> NttArray<{ D::K }> {
+    // TODO XXX: these depend on the value of USIZE
     let val_step = D::VALUE_STEP;
     let byte_step = D::BYTE_STEP;
-    let mask = (1 << D::USIZE) - 1;
+    let mask = (1 << USIZE) - 1;
 
     let mut vals = [[0u16; ARR_LEN]; D::K];
 
     let vc = vals.as_flattened_mut().chunks_mut(val_step);
-    let bc = bytes.as_ref()[..idx].chunks(byte_step);
+    let bc = bytes.as_ref().chunks(byte_step);
     for (v, b) in vc.zip(bc) {
         let mut xb = [0u8; 16];
         xb[..byte_step].copy_from_slice(b);
@@ -85,15 +72,15 @@ pub(crate) fn byte_decode<D: EncodingSize>(
         let x = u128::from_le_bytes(xb);
         for (j, v_out) in v.iter_mut().enumerate() {
             // TODO: is the truncate implementation really necessary?
-            let val: u16 = (x >> (D::USIZE * j)).truncate();
+            let val: u16 = (x >> (USIZE * j)).truncate();
             *v_out = val & mask;
 
-            if D::USIZE == 12 {
+            if USIZE == 12 {
                 *v_out %= FieldElement::Q;
             }
         }
     }
-    (rho, vals)
+    vals
 }
 
 /// Safely truncate an unsigned integer value to shorter representation
@@ -122,23 +109,50 @@ define_truncate!(u128, u16);
 define_truncate!(u128, u8);
 
 // ========================================================================== //
-// FIPs spec Ciphertext Operations
+// FIPs spec EncapsulationKey Encoding
 // ========================================================================== //
 
-fn concat_ct(u: [u8; 1], v: [u8; 2]) -> [u8; 3] {
-    let mut out = [0u8; 3];
-    out[..1].copy_from_slice(&u);
-    out[1..].copy_from_slice(&v);
-    out
+pub(crate) fn ek_encode<D>(
+    rho: &[u8; 32],
+    ntt_vals: &NttArray<{ D::K }>,
+) -> Barr8<{ D::FIPS_ENCODED_SIZE }>
+where
+    D: EncodingSize,
+    [(); D::USIZE]:,
+{
+    let mut bytes = [0u8; D::FIPS_ENCODED_SIZE];
+    let idx = D::FIPS_ENCODED_SIZE - RHO_LEN;
+
+    byte_encode::<D, { D::USIZE }>(ntt_vals, &mut bytes[..idx]);
+    bytes[idx..].copy_from_slice(&rho[..]);
+
+    bytes
 }
 
-fn split_ct(ct: &[u8]) -> (&[u8], &[u8]) {
-    (ct, ct)
+pub(crate) fn ek_decode<D>(bytes: impl AsRef<[u8]>) -> ([u8; 32], NttArray<{ D::K }>)
+where
+    D: EncodingSize,
+    [(); D::USIZE]:,
+{
+    //TODO: Lenth check on input for safety?
+    assert!(
+        bytes.as_ref().len() > (D::FIPS_ENCODED_SIZE - RHO_LEN),
+        "incorrect src len for K:{}",
+        D::K
+    );
+
+    let idx = bytes.as_ref().len() - RHO_LEN;
+    let vals = byte_decode::<D, { D::USIZE }>(&bytes.as_ref()[..idx]);
+
+    let mut rho = [0u8; RHO_LEN];
+    rho.copy_from_slice(&bytes.as_ref()[idx..]);
+
+    (rho, vals)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{byte_decode, byte_encode};
+    use super::*;
     use crate::{EncodingSize, FipsEncodingSize, RHO_LEN};
 
     use ml_kem::{Encoded, EncodedSizeUser, KemCore, MlKem1024, MlKem512, MlKem768};
@@ -146,6 +160,7 @@ mod tests {
     fn fips_encode_trial<D>()
     where
         D: KemCore + EncodingSize,
+        [(); D::USIZE]:,
         [(); <D as EncodingSize>::K]:,
         [(); <D as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
     {
@@ -154,9 +169,9 @@ mod tests {
 
         let bytes_in = ek.as_bytes().to_vec();
         assert!(!bytes_in.is_empty());
-        let (rho, ntt) = byte_decode::<D>(&bytes_in);
+        let (rho, ntt) = ek_decode::<D>(&bytes_in);
 
-        let bytes_out = byte_encode::<D>(&rho, &ntt);
+        let bytes_out = ek_encode::<D>(&rho, &ntt);
         // check that the byte representation of rho matches.
         assert_eq!(
             hex::encode(&bytes_in[..RHO_LEN]),
@@ -196,9 +211,9 @@ mod tests {
         let ek_decoded_in =
             ml_kem::kem::EncapsulationKey::<ml_kem::MlKem512Params>::from_bytes(&ek_encoded);
 
-        let (rho, ntt) = byte_decode::<MlKem512>(&ek_bytes);
+        let (rho, ntt) = ek_decode::<MlKem512>(&ek_bytes);
 
-        let bytes_out = byte_encode::<MlKem512>(&rho, &ntt);
+        let bytes_out = ek_encode::<MlKem512>(&rho, &ntt);
 
         let ek_encoded =
             Encoded::<ml_kem::kem::EncapsulationKey<ml_kem::MlKem512Params>>::try_from(

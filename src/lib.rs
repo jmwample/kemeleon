@@ -210,7 +210,7 @@ trait FipsEncodingSize: EncodingSize {
     const FIPS_T_HAT_LEN: usize = Self::K * 12 * 32;
     const FIPS_ENCODED_SIZE: usize = Self::FIPS_T_HAT_LEN + RHO_LEN;
 
-    const FIPS_ENCODED_USIZE: usize = 32 * (Self::DU * Self::K);
+    const FIPS_ENCODED_USIZE: usize = 32 * Self::DU * Self::K;
     const FIPS_ENCODED_VSIZE: usize = 32 * Self::DV;
     const FIPS_ENCODED_CT_SIZE: usize = Self::FIPS_ENCODED_USIZE + Self::FIPS_ENCODED_VSIZE;
 }

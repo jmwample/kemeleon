@@ -64,35 +64,7 @@ where
     [(); P::ENCODED_SIZE]:,
     [(); P::ENCODED_CT_SIZE]:,
     [(); P::FIPS_ENCODED_SIZE]:,
-    [(); P::FIPS_ENCODED_USIZE]:,
-    [(); P::FIPS_ENCODED_CT_SIZE]:,
 {
-    pub(crate) fn decode(c: impl AsRef<[u8]>) -> Result<Self, IoError> {
-        let (c1, c2) = split_ct::<P>(c.as_ref());
-
-        let mut values = [[0u16; ARR_LEN]; P::K];
-        vector_decode::<P>(&c1, values.as_flattened_mut())
-            .map_err(|e| IoError::other(format!("error occured while decoding {e}")))?;
-
-        // re-compress the values
-        let c1 = values.as_flattened_mut();
-        c1.iter_mut().compress::<P>();
-
-        // convert back to fips encoding of the U values
-        let mut fips_ct = [0u8; P::FIPS_ENCODED_CT_SIZE];
-        fips::byte_encode_values(&values, &mut fips_ct[..P::FIPS_ENCODED_USIZE]);
-
-        // ml_kem::Ciphertext = c1 || c2
-        fips_ct[P::FIPS_ENCODED_USIZE..].copy_from_slice(c2);
-        let fips = ml_kem::Ciphertext::<P>::try_from(&fips_ct[..])
-            .map_err(|_| IoError::other("failed to parse as ciphertext"))?;
-
-        Ok(Self {
-            encoded: true,
-            bytes: c.as_ref().to_vec(),
-            fips,
-        })
-    }
 }
 
 impl<P> Ciphertext<P>
@@ -116,7 +88,7 @@ where
 
         // create the DRBG
         // TODO: initialize hmac_drbg using sharedkey and ml_kem ciphertext
-        let mut drbg = HmacDRBG::<Sha256>::new(b"0000", b"0000", b"0000");
+        let mut drbg = HmacDRBG::<Sha256>::new(&ss[..], &fips_ct[..], b"");
 
         let encodable = kemeleon_ct.encode(&mut drbg)?;
         Ok((encodable, kemeleon_ct))
@@ -165,6 +137,37 @@ where
         self.bytes = concat_ct(&dst, c2).to_vec();
 
         Ok(success)
+    }
+
+    pub(crate) fn decode(c: impl AsRef<[u8]>) -> Result<Self, IoError>
+    where
+        [(); P::FIPS_ENCODED_USIZE]:,
+        [(); P::FIPS_ENCODED_CT_SIZE]:,
+    {
+        let (c1, c2) = split_ct::<P>(c.as_ref());
+
+        let mut values = [[0u16; ARR_LEN]; P::K];
+        vector_decode::<P>(&c1, values.as_flattened_mut())
+            .map_err(|e| IoError::other(format!("error occured while decoding {e}")))?;
+
+        // re-compress the values
+        let c1 = values.as_flattened_mut();
+        c1.iter_mut().compress::<P>();
+
+        // convert back to fips encoding of the U values
+        let mut fips_ct = [0u8; P::FIPS_ENCODED_CT_SIZE];
+        fips::byte_encode::<P, { P::DU }>(&values, &mut fips_ct[..P::FIPS_ENCODED_USIZE]);
+
+        // ml_kem::Ciphertext = c1 || c2
+        fips_ct[P::FIPS_ENCODED_USIZE..].copy_from_slice(c2);
+        let fips = ml_kem::Ciphertext::<P>::try_from(&fips_ct[..])
+            .map_err(|_| IoError::other("failed to parse as ciphertext"))?;
+
+        Ok(Self {
+            encoded: true,
+            bytes: c.as_ref().to_vec(),
+            fips,
+        })
     }
 }
 
@@ -241,9 +244,12 @@ mod test {
         P: ml_kem::KemCore + EncodingSize,
         [(); P::K]:,
         [(); P::DU]:,
+        [(); P::USIZE]:,
         [(); P::ENCODED_SIZE]:,
-        [(); P::FIPS_ENCODED_SIZE]:,
         [(); P::ENCODED_CT_SIZE]:,
+        [(); P::FIPS_ENCODED_SIZE]:,
+        [(); P::FIPS_ENCODED_USIZE]:,
+        [(); P::FIPS_ENCODED_CT_SIZE]:,
     {
         let mut rng = rand::thread_rng();
         let (dk, ek) = Kemx::<P>::generate(&mut rng);
