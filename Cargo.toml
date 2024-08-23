@@ -3,6 +3,12 @@ name = "kemeleon"
 version = "0.1.0"
 edition = "2021"
 
+[package.metadata.docs.rs]
+rustdoc-args = [
+    "--html-in-header",
+    "./doc/katex.html",
+]
+
 [features]
 deterministic = ["ml-kem/deterministic"]
 
