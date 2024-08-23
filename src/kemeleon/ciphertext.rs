@@ -1,4 +1,5 @@
 use super::{vector_decode, vector_encode, Encode};
+use crate::fips;
 use crate::{Barr8, EncodingSize, FipsEncodingSize, ARR_LEN};
 
 use std::io::Error as IoError;
@@ -63,31 +64,34 @@ where
     [(); P::ENCODED_SIZE]:,
     [(); P::ENCODED_CT_SIZE]:,
     [(); P::FIPS_ENCODED_SIZE]:,
+    [(); P::FIPS_ENCODED_USIZE]:,
+    [(); P::FIPS_ENCODED_CT_SIZE]:,
 {
     pub(crate) fn decode(c: impl AsRef<[u8]>) -> Result<Self, IoError> {
         let (c1, c2) = split_ct::<P>(c.as_ref());
-        // let idx_r1 = P::DV * ARR_LEN;
-        // let r1 = &c.as_ref()[..c.as_ref().len() - idx_r1];
-        // let c2 = &c.as_ref()[idx_r1..];
 
         let mut values = [[0u16; ARR_LEN]; P::K];
         vector_decode::<P>(&c1, values.as_flattened_mut())
-            .map_err(|e| IoError::other("error occured while decoding"))?;
+            .map_err(|e| IoError::other(format!("error occured while decoding {e}")))?;
 
+        // re-compress the values
         let c1 = values.as_flattened_mut();
         c1.iter_mut().compress::<P>();
-        let mut ctxt = c1.to_vec();
-        // ctxt.append(c2);
 
-        // let fips = ml_kem::Ciphertext::try_from(fips_ct.as_ref())
-        //     .map_err(|_| IoError::other("failed to parse as ciphertext"))?;
+        // convert back to fips encoding of the U values
+        let mut fips_ct = [0u8; P::FIPS_ENCODED_CT_SIZE];
+        fips::byte_encode_values(&values, &mut fips_ct[..P::FIPS_ENCODED_USIZE]);
 
-        // Ok(Self {
-        //     bytes: b.as_ref().to_vec(),
-        //     fips,
-        //     _p: PhantomData,
-        // })
-        todo!("not yet implemented");
+        // ml_kem::Ciphertext = c1 || c2
+        fips_ct[P::FIPS_ENCODED_USIZE..].copy_from_slice(c2);
+        let fips = ml_kem::Ciphertext::<P>::try_from(&fips_ct[..])
+            .map_err(|_| IoError::other("failed to parse as ciphertext"))?;
+
+        Ok(Self {
+            encoded: true,
+            bytes: c.as_ref().to_vec(),
+            fips,
+        })
     }
 }
 
@@ -108,6 +112,7 @@ where
         };
 
         // create the DRBG
+        // TODO: initialize hmac_drbg using sharedkey and ml_kem ciphertext
         let mut drbg = HmacDRBG::<Sha256>::new(b"0000", b"0000", b"0000");
 
         let encodable = kemeleon_ct.encode(&mut drbg)?;

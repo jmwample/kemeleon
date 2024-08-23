@@ -159,9 +159,13 @@ pub trait EncodingSize {
     /// Size of the Kemeleon encoded string as bytes. $ `T_HAT_LEN` + `RHO_LEN` $
     const ENCODED_SIZE: usize = Self::T_HAT_LEN + RHO_LEN;
 
-    const ENCODED_USIZE: usize = 0;
+    /// Size of the U value of the kemeleon encoded ciphertext. Matches `T_HAT_LEN`.
+    const ENCODED_USIZE: usize = Self::T_HAT_LEN;
+    /// Size of the V value of the Kemeleon encoded ciphertext. N values of Dv Bit size.
+    /// The number of bytes is computed as $ ENCODED_VSIZE = 256 * D_v / 8  for n=256 $
     const ENCODED_VSIZE: usize = 32 * Self::DV;
-    const ENCODED_CT_SIZE: usize;
+    /// Size of the combined kemeleon encoded ciphertext.
+    const ENCODED_CT_SIZE: usize = Self::ENCODED_USIZE + Self::ENCODED_VSIZE;
 }
 
 
@@ -177,35 +181,29 @@ impl<T: EncodingSize> FipsEncodingSize for T {}
 
 impl EncodingSize for ml_kem::MlKem512 {
     const K: usize = 2;
+    const DU: usize = 10;
+    const DV: usize = 4;
 
     const T_HAT_LEN: usize = 749;
     const MSB_BITMASK: u8 = 0b1100_0000;
-    const ENCODED_CT_SIZE: usize = 877;
-
-    const DU: usize = 10;
-    const DV: usize = 4;
 }
 
 impl EncodingSize for ml_kem::MlKem768 {
     const K: usize = 3;
+    const DU: usize = 10;
+    const DV: usize = 4;
 
     const T_HAT_LEN: usize = 1124;
     const MSB_BITMASK: u8 = 0b1111_1100;
-    const ENCODED_CT_SIZE: usize = 1252;
-
-    const DU: usize = 10;
-    const DV: usize = 4;
 }
 
 impl EncodingSize for ml_kem::MlKem1024 {
     const K: usize = 4;
+    const DU: usize = 11;
+    const DV: usize = 5;
 
     const T_HAT_LEN: usize = 1498;
     const MSB_BITMASK: u8 = 0b1110_0000;
-    const ENCODED_CT_SIZE: usize = 1658;
-
-    const DU: usize = 11;
-    const DV: usize = 5;
 }
 
 // ========================================================================== //

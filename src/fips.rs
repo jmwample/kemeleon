@@ -11,7 +11,7 @@
 //! properly.
 //!
 
-use crate::{Barr8, EncodingSize, FipsEncodingSize, FieldElement, NttArray, ARR_LEN, RHO_LEN};
+use crate::{Barr8, EncodingSize, FieldElement, FipsEncodingSize, NttArray, ARR_LEN, RHO_LEN};
 
 // ========================================================================== //
 // FIPs spec EncapsulationKey Encoding
@@ -31,6 +31,18 @@ where
     let idx = D::FIPS_ENCODED_SIZE - RHO_LEN;
     bytes[idx..].copy_from_slice(&rho[..]);
 
+    byte_encode_values(ntt_vals, &mut bytes[..idx]);
+    bytes
+}
+
+pub(crate) fn byte_encode_values<D>(ntt_vals: &NttArray<{ D::K }>, mut dst: impl AsMut<[u8]>)
+where
+    D: EncodingSize,
+{
+    let bytes = dst.as_mut();
+    let idx = D::FIPS_ENCODED_SIZE - RHO_LEN;
+    // bytes[idx..].copy_from_slice(&rho[..]);
+
     let val_step = D::VALUE_STEP;
     let byte_step = D::BYTE_STEP;
 
@@ -45,10 +57,7 @@ where
         let xb = x.to_le_bytes();
         b.copy_from_slice(&xb[..byte_step]);
     }
-
-    bytes
 }
-
 // Algorithm 5 ByteDecode_d(F)
 //
 // Note: This function performs decompression as well as decoding.
