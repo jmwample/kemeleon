@@ -230,3 +230,4 @@ pub(crate) mod test {
     encoding_usize!(11);
     encoding_usize!(12);
 }
+

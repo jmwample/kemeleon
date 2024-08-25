@@ -41,6 +41,10 @@
 //!
 //! #### Encapsulation Keys
 //!
+//! $$
+//! Kemeleon.VectorEncode(a):
+//! $$
+//!
 //! ```txt ignore
 //! Kemeleon.Encode(a):
 //!   1 𝑟 ← sum(𝑖=1, 𝑘·𝑛, 𝑞^(𝑖−1) · a[𝑖]
@@ -63,10 +67,17 @@
 //!
 //! #### Ciphertext
 //!
-//! ```txt ignore
-//! Kemeleon.EncodeCtxt(c = (c1 || c2)):
-//!
-//! ```
+// $$
+// EncodeCiphertext(c = (c1 || c2)): \\
+//
+// for i in
+//
+// $$
+//
+// = \[0 .. k*n\]: \\\
+//     x \xleftarrow $ \{ a: Decomp(Comp(u\[i\] + a, d_u), d_u)=u\[i\] \}
+// \begin{aligned}
+// \end{aligned}
 //!
 //! ```txt ignore
 //! Kemeleon.DecodeCtxt(r):

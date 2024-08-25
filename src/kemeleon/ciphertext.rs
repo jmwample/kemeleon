@@ -13,6 +13,8 @@ use sha2::Sha256;
 
 mod compress;
 use compress::Compress;
+mod precomputed;
+use precomputed::get_eq_set;
 
 mod hmac_drbg;
 use hmac_drbg::HmacDRBG;
@@ -132,7 +134,7 @@ where
 
         // TODO: check c2 for 0s and rejection sample based on probability
         // c2.for_each(|v| success &= ??? );
-        success &= rejection_sample(c2, rng);
+        success &= rejection_sample(c2, rng, P::DV);
 
         self.bytes = concat_ct(&dst, c2).to_vec();
 
@@ -180,12 +182,22 @@ fn u16_to_u8(x16: &[u16]) -> Vec<u8> {
 
 fn recover_rand<const D: usize>(i: u16, rng: &mut impl CryptoRngCore) -> u16 {
     // TODO: find values that do not modify u_i
+
+    let eq_set = get_eq_set::<D>(0);
     i
 }
 
-fn rejection_sample<R: CryptoRng + RngCore>(c2: &[u8], rng: &mut R) -> bool {
-    // TODO: implement me
-    true
+fn rejection_sample<R: CryptoRng + RngCore>(c2: &[u8], rng: &mut R, dv: usize) -> bool {
+    let mut result = true;
+    let lim = 2_u32.pow(dv as u32);
+    for val in c2 {
+        if *val == 0 {
+            if rng.next_u32() % 3329 < lim {
+                result = false;
+            }
+        }
+    }
+    result
 }
 
 fn split_fips_ct<P>(b: &[u8]) -> (&[u8], &[u8])

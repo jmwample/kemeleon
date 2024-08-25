@@ -25,6 +25,7 @@ pub(crate) fn byte_encode<D, const USIZE: usize>(
     let bytes = dst.as_mut();
     let idx = USIZE * D::K * 256 / 8;
 
+    // TODO should I remove this length check or convert it to a result?
     assert_eq!(
         bytes.len(),
         idx,
@@ -33,7 +34,6 @@ pub(crate) fn byte_encode<D, const USIZE: usize>(
         D::K
     );
 
-    // TODO XXX: these depend on the value of USIZE
     let y = (USIZE * 8) / gcd(USIZE, 8);
     let val_step = y / USIZE;
     let byte_step = y / 8;
