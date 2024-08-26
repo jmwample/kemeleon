@@ -28,8 +28,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@nightly
-    - name: Install udeps
+    - name: Install and run udeps
       run: cargo +nightly install cargo-udeps --locked
+      run: cargo +nightly udeps --all-features --all-targets
 
  #   lint:
  #     name: Lint with clippy
