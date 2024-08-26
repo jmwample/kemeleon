@@ -1,5 +1,19 @@
 # Kemeleon
 
+<p>
+  <a href="https://github.com/jmwample/kemeleon/actions/workflows/rust.yml">
+    <img src="https://github.com/jmwample/kemeleon/actions/workflows/rust.yml/badge.svg?branch=main" alt="Build Status">
+  <a href="https://codecov.io/gh/jmwample/kemeleon" >
+    <img src="https://codecov.io/gh/jmwample/kemeleon/graph/badge.svg?token=0lMlrA32xd"/>
+  </a>
+  <a href="https://deps.rs/repo/github/jmwample/kemeleon">
+    <img src="https://deps.rs/repo/github/jmwample/kemeleon/status.svg">
+  </a>
+  <a href="https://doc.rust-lang.org/1.6.0/complement-project-faq.html#why-dual-mitasl2-license">
+    <img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-blue" alt="License: MIT/Apache 2.0">
+  </a>
+</p>
+
 Algorithms for Obfuscating ML-KEM handshake materials.
 
 ## Why?

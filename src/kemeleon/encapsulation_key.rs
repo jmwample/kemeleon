@@ -71,7 +71,7 @@ where
 
 impl<P> EncapsulationKey<P>
 where
-    P: KemCore + EncodingSize + FipsEncodingSize,
+    P: KemCore + EncodingSize,
     [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
     [(); <P as EncodingSize>::ENCODED_SIZE]:,
     [(); <P as EncodingSize>::K]:,

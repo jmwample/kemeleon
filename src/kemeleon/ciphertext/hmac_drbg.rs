@@ -7,14 +7,14 @@
 //!
 //! # Modifications
 //! - [x] Update dependencies
-//! - [x] implement RngCore for `HmacDRBG`
+//! - [x] implement `RngCore` for `HmacDRBG`
 //! - [ ] **TODO**: Make reading bytes consistent.
 //!   - Right now a read creates a block and
-//! throws away any unused bytes. This means that if you constantly call `next_u32`
-//! you will get nea new block every time even though you are only using 4 bytes
-//! of the block, So the bytes you get would be a subset of the ones you get
-//! from just reading into a large [u8]. This could be fixed by keeping track
-//! of how many bytes are remaining in the current block before updating.
+//!     throws away any unused bytes. This means that if you constantly call `next_u32`
+//!     you will get nea new block every time even though you are only using 4 bytes
+//!     of the block, So the bytes you get would be a subset of the ones you get
+//!     from just reading into a large [u8]. This could be fixed by keeping track
+//!     of how many bytes are remaining in the current block before updating.
 //!   - Does this contradict the HMAC DRBG RFC?
 
 use core::cmp::min;

@@ -22,6 +22,7 @@ use hmac_drbg::HmacDRBG;
 // ========================================================================== //
 
 pub use crate::mlkem::KCiphertext as Ciphertext;
+#[allow(clippy::module_name_repetitions)]
 pub use crate::mlkem::KEncodedCiphertext as EncodedCiphertext;
 
 impl<P> Encode for EncodedCiphertext<P>
@@ -83,6 +84,8 @@ where
         Ok((encodable, kemeleon_ct))
     }
 
+    // TODO: find a good way to expose this
+    #[allow(dead_code)]
     fn new_from_rng<R: RngCore + CryptoRng>(
         fips_ct: &ml_kem::Ciphertext<P>,
         rng: &mut R,
@@ -106,7 +109,7 @@ where
         r1.as_flattened_mut()
             .iter_mut()
             .decompress::<Du<{ P::DU }>>();
-        for mut u_i in r1.as_flattened_mut() {
+        for u_i in r1.as_flattened_mut().iter_mut() {
             *u_i = recover_rand::<{ P::DU }>(*u_i, rng);
         }
 
@@ -168,10 +171,8 @@ fn rejection_sample<R: CryptoRng + RngCore>(c2: &[u8], rng: &mut R, dv: usize) -
     let mut result = true;
     let lim = 2_u32.pow(dv as u32);
     for val in c2 {
-        if *val == 0 {
-            if rng.next_u32() % 3329 < lim {
-                result = false;
-            }
+        if *val == 0 && rng.next_u32() % 3329 < lim {
+            result = false;
         }
     }
     result
@@ -205,17 +206,6 @@ where
     let mut out = [0u8; P::ENCODED_CT_SIZE];
     out[..P::ENCODED_USIZE].copy_from_slice(&u[..P::ENCODED_USIZE]);
     out[P::ENCODED_USIZE..P::ENCODED_CT_SIZE].copy_from_slice(&v[..P::ENCODED_VSIZE]);
-    out
-}
-
-fn concat_fips_ct<P>(u: &[u8], v: &[u8]) -> [u8; P::FIPS_ENCODED_CT_SIZE]
-where
-    P: EncodingSize,
-    [(); P::FIPS_ENCODED_CT_SIZE]:,
-{
-    let mut out = [0u8; P::FIPS_ENCODED_CT_SIZE];
-    out[..P::FIPS_ENCODED_USIZE].copy_from_slice(&u[..P::FIPS_ENCODED_USIZE]);
-    out[P::ENCODED_USIZE..P::FIPS_ENCODED_CT_SIZE].copy_from_slice(&v[..P::FIPS_ENCODED_VSIZE]);
     out
 }
 
@@ -265,17 +255,19 @@ mod test {
 
             i += 1;
         }
-        if i == MAX_RETRIES {
-            panic!("{desc}: failed to find an encodable ciphertext - not possible");
-        }
+        assert!(
+            i < MAX_RETRIES,
+            "{desc}: failed to find an encodable ciphertext - not possible"
+        );
         // <<<
         // <<<
 
         let ct_bytes = kemeleon_ct.bytes;
         let ct_bytes_recv = KEncodedCiphertext::try_from_bytes(ct_bytes)
-            .expect(&format!("{desc} failed to parse KEncodedCiphertext"));
+            .unwrap_or_else(|e| panic!("{desc} failed to parse KEncodedCiphertext {e}"));
 
-        let ct_recv = KCiphertext::decode(&ct_bytes_recv).expect(&format!("{desc}: failed decode"));
+        let ct_recv = KCiphertext::decode(&ct_bytes_recv)
+            .unwrap_or_else(|e| panic!("{desc}: failed decode {e}"));
         assert_eq!(ct_recv.fips, ct, "{desc}: fips ciphertexts don't match");
 
         // decapsulate using the kemeleon decapsulation key

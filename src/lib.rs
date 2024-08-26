@@ -86,18 +86,19 @@
 //!
 //! ## Minimum Supported Rust Version (MSRV)
 //!
-//! The Minimum Supported Rust Versions (MSRV) for this crate will be listed
-//! here (TODO). This version will be ensured by the test and build steps in the
-//! CI pipeline.
+//! The Minimum Supported Rust Versions (MSRV) for this crate is **Rust 1.74**
+//! forced by the [`ml-kem`] dependency. This minumum version will be ensured by
+//! the test and build steps in the CI pipeline.
 //!
-//! The MSRV can be changed in the future, but it will be done with a minor
-//! version bump. We will not increase MSRV on PATCH releases, though
+//! Going forward, the MSRV can be changed at any time, but it will be done with
+//! a minor version bump. We will not increase MSRV on PATCH releases, though
 //! downstream dependencies might.
 //!
 //! We won't increase MSRV just because we can: we'll only do so when we have a
 //! reason. (We don't guarantee that you'll agree with our reasoning; only that
 //! it will exist.)
 //!
+#![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 
 use core::fmt::Debug;
@@ -210,8 +211,9 @@ pub trait EncodingSize {
 
     /// Size of the U value of the kemeleon encoded ciphertext. Matches `T_HAT_LEN`.
     const ENCODED_USIZE: usize = Self::T_HAT_LEN;
+    #[allow(clippy::doc_markdown)]
     /// Size of the V value of the Kemeleon encoded ciphertext. N values of Dv Bit size.
-    /// The number of bytes is computed as $ ENCODED_VSIZE = 256 * D_v / 8  for n=256 $
+    /// The number of bytes is computed as $ ENCODED_VSIZE = n * D_v / 8 \text{ --- for } n=256 $
     const ENCODED_VSIZE: usize = 32 * Self::DV;
     /// Size of the combined kemeleon encoded ciphertext.
     const ENCODED_CT_SIZE: usize = Self::ENCODED_USIZE + Self::ENCODED_VSIZE;
