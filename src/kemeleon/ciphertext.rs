@@ -7,7 +7,7 @@ use std::io::Error as IoError;
 use byteorder::BigEndian;
 use byteorder::WriteBytesExt;
 use ml_kem::KemCore;
-use rand::{CryptoRng, RngCore, seq::SliceRandom};
+use rand::{seq::SliceRandom, CryptoRng, RngCore};
 use rand_core::CryptoRngCore;
 use sha2::Sha256;
 
@@ -113,10 +113,12 @@ where
     fn encode<R: RngCore + CryptoRng>(&mut self, rng: &mut R) -> Result<bool, IoError> {
         // split the u and v elements
         let (c1, c2) = split_fips_ct::<P>(&self.fips);
-        let mut r1: [[u16; ARR_LEN]; P::K] = fips::byte_decode::<P, {P::DU}>(&c1);
+        let mut r1: [[u16; ARR_LEN]; P::K] = fips::byte_decode::<P, { P::DU }>(&c1);
 
         // re-add randomness to the u elements
-        r1.as_flattened_mut().iter_mut().decompress::<Du<{P::DU}>>();
+        r1.as_flattened_mut()
+            .iter_mut()
+            .decompress::<Du<{ P::DU }>>();
         for mut u_i in r1.as_flattened_mut() {
             *u_i = recover_rand::<{ P::DU }>(*u_i, rng);
         }
@@ -147,7 +149,7 @@ where
 
         // re-compress the values
         let c1 = values.as_flattened_mut();
-        c1.iter_mut().compress::<Du<{P::DU}>>();
+        c1.iter_mut().compress::<Du<{ P::DU }>>();
 
         // convert back to fips encoding of the U values
         let mut fips_ct = [0u8; P::FIPS_ENCODED_CT_SIZE];
@@ -158,7 +160,6 @@ where
         let fips = ml_kem::Ciphertext::<P>::try_from(&fips_ct[..])
             .map_err(|_| IoError::other("failed to parse as ciphertext"))?;
 
-
         Ok(Self {
             encoded: true,
             bytes: ct_bytes,
@@ -168,11 +169,10 @@ where
 }
 
 fn recover_rand<const DU: usize>(i: u16, rng: &mut impl CryptoRngCore) -> u16 {
-     // let mut compressed_i = i;
-     // compressed_i.compress::<Du<DU>>();
-     // let eq_set = get_eq_set::<DU>(compressed_i);
-     // *eq_set.choose(rng).expect("no equivalence found, should be impossible")
-     i
+    let mut compressed_i = i;
+    compressed_i.compress::<Du<DU>>();
+    let eq_set = get_eq_set::<DU>(compressed_i);
+    *eq_set.choose(rng).expect("no equivalence found, should be impossible")
 }
 
 fn rejection_sample<R: CryptoRng + RngCore>(c2: &[u8], rng: &mut R, dv: usize) -> bool {
@@ -234,7 +234,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::mlkem::{KEncodedCiphertext, KCiphertext, Kemx, MAX_RETRIES};
+    use crate::mlkem::{KCiphertext, KEncodedCiphertext, Kemx, MAX_RETRIES};
 
     use kem::{Decapsulate, Encapsulate};
     use ml_kem::{MlKem1024, MlKem512, MlKem768};
@@ -256,12 +256,14 @@ mod test {
         // encapsulation key being encodable.
         let (dk, ek) = Kemx::<P>::generate(&mut rng);
 
+        // >>> Because we are doing a FIPS encapsulation and manually encoding we have to
+        // >>> sample the rng ourselves in case we generate an unencodable ciphertext.
 
         // encapsulate a secret using the kemeleon Encapsulation key
         let (mut ct, mut k_send) = ek.key.encapsulate(&mut rng).unwrap();
         // attempt to encode the ciphertext to kemeleon representation
-        let (mut encodable, mut kemeleon_ct) = KCiphertext::new_from_rng(&ct, &mut rng)
-                .expect("failed to make new ciphertext");
+        let (mut encodable, mut kemeleon_ct) =
+            KCiphertext::new_from_rng(&ct, &mut rng).expect("failed to make new ciphertext");
 
         let mut i = 0;
         while !encodable && i < MAX_RETRIES {
@@ -270,31 +272,31 @@ mod test {
             (ct, k_send) = ek.key.encapsulate(&mut rng).unwrap();
 
             // attempt to encode the ciphertext to kemeleon representation
-            (encodable, kemeleon_ct) = KCiphertext::new_from_rng(&ct, &mut rng)
-                .expect("failed to make new ciphertext");
+            (encodable, kemeleon_ct) =
+                KCiphertext::new_from_rng(&ct, &mut rng).expect("failed to make new ciphertext");
 
-            if !encodable {
-                println!("{i} {}...", hex::encode(&kemeleon_ct.fips[..32]));
-            }
-
-            i+=1;
+            i += 1;
         }
         if i == MAX_RETRIES {
             panic!("{desc}: failed to find an encodable ciphertext - not possible");
         }
+        // <<<
+        // <<<
 
         let ct_bytes = kemeleon_ct.bytes;
         let ct_bytes_recv = KEncodedCiphertext::try_from_bytes(ct_bytes)
             .expect(&format!("{desc} failed to parse KEncodedCiphertext"));
 
-        let ct_recv = KCiphertext::decode(&ct_bytes_recv)
-            .expect(&format!("{desc}: failed decode"));
+        let ct_recv = KCiphertext::decode(&ct_bytes_recv).expect(&format!("{desc}: failed decode"));
         assert_eq!(ct_recv.fips, ct, "{desc}: fips ciphertexts don't match");
 
         // decapsulate using the kemeleon decapsulation key
         // make sure the shared secret matches
         let k_recv = dk.decapsulate(&ct_bytes_recv).unwrap();
-        assert_eq!(k_send, k_recv, "{desc}: derived fips shared keys don't match");
+        assert_eq!(
+            k_send, k_recv,
+            "{desc}: derived fips shared keys don't match"
+        );
     }
 
     #[test]

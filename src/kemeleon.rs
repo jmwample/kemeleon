@@ -1,7 +1,6 @@
-
+pub use crate::mlkem::KCiphertext as Ciphertext;
 /// Key used for encapsulation
 pub use crate::mlkem::KEncapsulationKey as EncapsulationKey;
-pub use crate::mlkem::KCiphertext as Ciphertext;
 // pub use crate::mlkem::KEncodedCiphertext as EncodedCiphertext;
 use crate::{EncodingSize, FieldElement, FipsEncodingSize};
 

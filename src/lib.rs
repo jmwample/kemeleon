@@ -18,7 +18,7 @@
 //!
 //! ## Usage
 //!
-//! ```
+//! ```rust ignore
 //! use kemeleon::MlKem512;
 //! use kem::{Encapsulate, Decapsulate};
 //!

@@ -155,7 +155,7 @@ where
 pub struct KCiphertext<P>
 where
     P: KemCore + EncodingSize,
-    [(); P::ENCODED_CT_SIZE]:
+    [(); P::ENCODED_CT_SIZE]:,
 {
     pub(crate) encoded: bool,
     pub(crate) bytes: [u8; P::ENCODED_CT_SIZE],
