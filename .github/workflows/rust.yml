@@ -31,8 +31,7 @@ jobs:
       with:
         components: udeps
     - name: Install udeps
-      run: rustup component add udeps --toolchain nightly
-    - run: cargo udeps --all-targets
+      run: cargo install cargo-udeps --locked
 
   lint:
     name: Lint with clippy
