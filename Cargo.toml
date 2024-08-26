@@ -13,7 +13,6 @@ rustdoc-args = [
 deterministic = ["ml-kem/deterministic"]
 
 [dependencies]
-byteorder = "1.5.0"
 num-bigint = "0.4.6"
 rand = "0.8.5"
 ml-kem = { version="0.2.1" }

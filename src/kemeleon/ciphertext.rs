@@ -4,8 +4,6 @@ use crate::{Barr8, EncodingSize, FipsEncodingSize, ARR_LEN};
 
 use std::io::Error as IoError;
 
-use byteorder::BigEndian;
-use byteorder::WriteBytesExt;
 use ml_kem::KemCore;
 use rand::{seq::SliceRandom, CryptoRng, RngCore};
 use rand_core::CryptoRngCore;
@@ -56,17 +54,6 @@ where
 
         Ok(EncodedCiphertext::<P>(arr))
     }
-}
-
-impl<P> Ciphertext<P>
-where
-    P: KemCore + EncodingSize,
-    [(); P::K]:,
-    [(); P::DU]:,
-    [(); P::ENCODED_SIZE]:,
-    [(); P::ENCODED_CT_SIZE]:,
-    [(); P::FIPS_ENCODED_SIZE]:,
-{
 }
 
 impl<P> Ciphertext<P>
@@ -200,7 +187,6 @@ where
     )
 }
 
-// TODO: this is skeleton code
 fn split_ct<P>(b: &[u8]) -> (&[u8], &[u8])
 where
     P: EncodingSize,
