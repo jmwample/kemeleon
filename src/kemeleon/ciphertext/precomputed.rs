@@ -1,3 +1,4 @@
+//! TODO: Document Use of Precomputed for re-randomizing U values
 use lazy_static::lazy_static;
 
 pub(crate) fn get_eq_set<const USIZE: usize>(u_i: u16) -> &'static [u16] {

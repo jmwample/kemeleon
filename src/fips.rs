@@ -68,9 +68,9 @@ fn gcd(x: usize, y: usize) -> usize {
 pub(crate) fn byte_decode<D: EncodingSize, const USIZE: usize>(
     bytes: impl AsRef<[u8]>,
 ) -> NttArray<{ D::K }> {
-    // TODO XXX: these depend on the value of USIZE
-    let val_step = D::VALUE_STEP;
-    let byte_step = D::BYTE_STEP;
+    let y = (USIZE * 8) / gcd(USIZE, 8);
+    let val_step = y / USIZE;
+    let byte_step = y / 8;
     let mask = (1 << USIZE) - 1;
 
     let mut vals = [[0u16; ARR_LEN]; D::K];

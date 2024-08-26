@@ -12,7 +12,7 @@ use rand_core::CryptoRngCore;
 // ========================================================================== //
 
 /// Number of retries to generate a key pair that satisfies the Kemeleon criteria.
-const MAX_RETRIES: usize = 64;
+pub(crate) const MAX_RETRIES: usize = 64;
 
 #[derive(Debug, PartialEq, PartialOrd)]
 pub struct Kemx<P>
@@ -119,9 +119,7 @@ where
                 continue;
             }
 
-            let mut vec_todo = [0u8; P::ENCODED_CT_SIZE];
-            vec_todo.copy_from_slice(&ct.bytes[..P::ENCODED_CT_SIZE]);
-            return Ok((KEncodedCiphertext(vec_todo), ss));
+            return Ok((KEncodedCiphertext(ct.bytes), ss));
         }
         panic!("failed to generate shared secret and encapsulate - you have a bad random number generator")
     }
@@ -156,10 +154,11 @@ where
 #[derive(Debug, PartialEq, PartialOrd)]
 pub struct KCiphertext<P>
 where
-    P: KemCore,
+    P: KemCore + EncodingSize,
+    [(); P::ENCODED_CT_SIZE]:
 {
     pub(crate) encoded: bool,
-    pub(crate) bytes: Vec<u8>,
+    pub(crate) bytes: [u8; P::ENCODED_CT_SIZE],
     pub(crate) fips: Ciphertext<P>,
 }
 
