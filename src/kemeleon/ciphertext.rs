@@ -256,7 +256,7 @@ mod test {
             i += 1;
         }
         assert!(
-            i == MAX_RETRIES,
+            i < MAX_RETRIES,
             "{desc}: failed to find an encodable ciphertext - not possible"
         );
         // <<<
