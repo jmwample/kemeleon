@@ -4,31 +4,32 @@
 //! Both the Apache2 and MIT licenses for the `RustCrypto` crate are included in
 //! `docs/licenses/`.
 
-use crate::{fips::Truncate, EncodingSize, FieldElement};
+use crate::{fips::Truncate, FieldElement};
 
 use core::slice::IterMut;
 
-// A convenience trait to allow us to associate some constants with a typenum
-pub trait CompressionFactor: EncodingSize {
+pub(crate) struct Du<const USIZE: usize> {}
+
+pub(crate) trait CompressionFactor {
+    const USIZE: usize;
     const POW2_HALF: u32;
     const MASK: u16;
     const DIV_SHIFT: usize;
     const DIV_MUL: u64;
+    const Q_HALF: u64 = (FieldElement::Q64 + 1) >> 1;
 }
 
-impl<T> CompressionFactor for T
-where
-    T: EncodingSize,
-{
-    const POW2_HALF: u32 = 1 << (T::USIZE - 1);
-    const MASK: u16 = ((1_u16) << T::USIZE) - 1;
+impl<const USIZE: usize> CompressionFactor for Du<{ USIZE }> {
+    const USIZE: usize = USIZE;
+    const POW2_HALF: u32 = 1 << (Self::USIZE - 1);
+    const MASK: u16 = ((1_u16) << Self::USIZE) - 1;
     const DIV_SHIFT: usize = 34;
     #[allow(clippy::integer_division_remainder_used)]
-    const DIV_MUL: u64 = (1 << T::DIV_SHIFT) / FieldElement::Q64;
+    const DIV_MUL: u64 = (1 << Self::DIV_SHIFT) / FieldElement::Q64;
 }
 
 // Traits for objects that allow compression / decompression
-pub trait Compress {
+pub(crate) trait Compress {
     fn compress<D: CompressionFactor>(&mut self) -> &Self;
     fn decompress<D: CompressionFactor>(&mut self) -> &Self;
 }
@@ -41,9 +42,8 @@ impl Compress for u16 {
     //   round(a / b) = floor((a + b/2) / b)
     //   a / q ~= (a * x) >> s where x >> s ~= 1/q
     fn compress<D: CompressionFactor>(&mut self) -> &Self {
-        const Q_HALF: u64 = (FieldElement::Q64 + 1) >> 1;
         let x = u64::from(*self);
-        let y = ((((x << D::USIZE) + Q_HALF) * D::DIV_MUL) >> D::DIV_SHIFT).truncate();
+        let y = ((((x << D::USIZE) + D::Q_HALF) * D::DIV_MUL) >> D::DIV_SHIFT).truncate();
         *self = y.truncate() & D::MASK;
         self
     }
@@ -65,9 +65,8 @@ impl Compress for FieldElement {
     //   round(a / b) = floor((a + b/2) / b)
     //   a / q ~= (a * x) >> s where x >> s ~= 1/q
     fn compress<D: CompressionFactor>(&mut self) -> &Self {
-        const Q_HALF: u64 = (FieldElement::Q64 + 1) >> 1;
         let x = u64::from(self.0);
-        let y = ((((x << D::USIZE) + Q_HALF) * D::DIV_MUL) >> D::DIV_SHIFT).truncate();
+        let y = ((((x << D::USIZE) + D::Q_HALF) * D::DIV_MUL) >> D::DIV_SHIFT).truncate();
         self.0 = y.truncate() & D::MASK;
         self
     }
@@ -102,7 +101,6 @@ impl<'a> Compress for IterMut<'a, u16> {
 pub(crate) mod test {
     use super::*;
     use num_rational::Ratio;
-    use paste::paste;
 
     fn rational_compress<D: CompressionFactor>(input: u16) -> u16 {
         let fraction = Ratio::new(u32::from(input) * (1 << D::USIZE), FieldElement::Q32);
@@ -181,53 +179,21 @@ pub(crate) mod test {
 
     #[test]
     fn decompress_compress() {
-        compress_decompress_properties::<U1>();
-        compress_decompress_properties::<U4>();
-        compress_decompress_properties::<U5>();
-        compress_decompress_properties::<U6>();
-        compress_decompress_properties::<U10>();
-        compress_decompress_properties::<U11>();
+        compress_decompress_properties::<Du<1>>();
+        compress_decompress_properties::<Du<4>>();
+        compress_decompress_properties::<Du<5>>();
+        compress_decompress_properties::<Du<6>>();
+        compress_decompress_properties::<Du<10>>();
+        compress_decompress_properties::<Du<11>>();
         // preservation under decompression first only holds for d < 12
-        compression_decompression_inequality::<U12>();
+        compression_decompression_inequality::<Du<12>>();
 
-        compress_decompress_KATs::<U1>();
-        compress_decompress_KATs::<U4>();
-        compress_decompress_KATs::<U5>();
-        compress_decompress_KATs::<U6>();
-        compress_decompress_KATs::<U10>();
-        compress_decompress_KATs::<U11>();
-        compress_decompress_KATs::<U12>();
+        compress_decompress_KATs::<Du<1>>();
+        compress_decompress_KATs::<Du<4>>();
+        compress_decompress_KATs::<Du<5>>();
+        compress_decompress_KATs::<Du<6>>();
+        compress_decompress_KATs::<Du<10>>();
+        compress_decompress_KATs::<Du<11>>();
+        compress_decompress_KATs::<Du<12>>();
     }
-
-    macro_rules! encoding_usize {
-        ($v:tt) => {
-            paste! {
-                encoding_usize!($v, [<U $v>]);
-            }
-        };
-        ($v:tt, $n:ident) => {
-            #[derive(Debug)]
-            struct $n {}
-
-            impl EncodingSize for $n {
-                const USIZE: usize = $v;
-                const ENCODED_CT_SIZE: usize = 0;
-
-                // these don't matter for these tests.
-                const K: usize = 2;
-                const T_HAT_LEN: usize = 1;
-                const MSB_BITMASK: u8 = 0xff;
-                const DU: usize = 10;
-                const DV: usize = 4;
-            }
-        };
-    }
-    encoding_usize!(1);
-    encoding_usize!(4);
-    encoding_usize!(5);
-    encoding_usize!(6);
-    encoding_usize!(10);
-    encoding_usize!(11);
-    encoding_usize!(12);
 }
-

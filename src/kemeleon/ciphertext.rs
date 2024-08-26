@@ -1,5 +1,5 @@
 use super::{vector_decode, vector_encode, Encode};
-use crate::fips;
+use crate::{fips, FieldElement};
 use crate::{Barr8, EncodingSize, FipsEncodingSize, ARR_LEN};
 
 use std::io::Error as IoError;
@@ -7,12 +7,12 @@ use std::io::Error as IoError;
 use byteorder::BigEndian;
 use byteorder::WriteBytesExt;
 use ml_kem::KemCore;
-use rand::{CryptoRng, RngCore};
+use rand::{CryptoRng, RngCore, seq::SliceRandom};
 use rand_core::CryptoRngCore;
 use sha2::Sha256;
 
 mod compress;
-use compress::Compress;
+use compress::{Compress, Du};
 mod precomputed;
 use precomputed::get_eq_set;
 
@@ -119,7 +119,7 @@ where
             .collect();
 
         // re-add randomness to the u elements
-        r1.iter_mut().decompress::<P>();
+        r1.iter_mut().decompress::<Du<{P::DU}>>();
         for mut u_i in &mut r1 {
             *u_i = recover_rand::<{ P::DU }>(*u_i, rng);
         }
@@ -154,7 +154,7 @@ where
 
         // re-compress the values
         let c1 = values.as_flattened_mut();
-        c1.iter_mut().compress::<P>();
+        c1.iter_mut().compress::<Du<{P::DU}>>();
 
         // convert back to fips encoding of the U values
         let mut fips_ct = [0u8; P::FIPS_ENCODED_CT_SIZE];
@@ -180,11 +180,11 @@ fn u16_to_u8(x16: &[u16]) -> Vec<u8> {
     out
 }
 
-fn recover_rand<const D: usize>(i: u16, rng: &mut impl CryptoRngCore) -> u16 {
-    // TODO: find values that do not modify u_i
-
-    let eq_set = get_eq_set::<D>(0);
-    i
+fn recover_rand<const DU: usize>(i: u16, rng: &mut impl CryptoRngCore) -> u16 {
+     let mut compressed_i = i;
+     compressed_i.compress::<Du<DU>>();
+     let eq_set = get_eq_set::<DU>(compressed_i);
+     *eq_set.choose(rng).expect("no equivalence found, should be impossible")
 }
 
 fn rejection_sample<R: CryptoRng + RngCore>(c2: &[u8], rng: &mut R, dv: usize) -> bool {

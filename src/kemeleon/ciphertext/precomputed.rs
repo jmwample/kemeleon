@@ -3094,7 +3094,10 @@ lazy_static! {
 
 #[cfg(test)]
 mod test {
-    use crate::FieldElement;
+    use crate::kemeleon::ciphertext::compress::*;
+    use crate::{EncodingSize, FieldElement};
+
+    use ml_kem::{MlKem1024, MlKem512, MlKem768};
 
     use super::*;
 
@@ -3104,16 +3107,48 @@ mod test {
             s.append(&mut v.to_vec());
         }
 
-        assert_eq!(FieldElement::Q as usize, s.len(), "{desc}: failed length check");
+        assert_eq!(
+            FieldElement::Q as usize,
+            s.len(),
+            "{desc}: failed length check"
+        );
 
         let expected: Vec<u16> = (0_u16..FieldElement::Q).collect();
         s.sort();
-        assert_eq!(expected, s, "{desc}: doesn't contain all values, or contains repeated values");
+        assert_eq!(
+            expected, s,
+            "{desc}: doesn't contain all values, or contains repeated values"
+        );
     }
 
     #[test]
     fn eq_set_completeness() {
         eq_set_completeness_test("du:10, [MlKem512, MlKem768]", &EQ_SET_10[..]);
         eq_set_completeness_test("du:11, [MlKem1024]", &EQ_SET_11[..]);
+    }
+
+    fn eq_sets_match_test<D>(desc: &str)
+    where
+        D: EncodingSize,
+        [(); D::DU]:,
+    {
+        for v in 0..FieldElement::Q {
+            let mut compressed_v = v;
+            compressed_v.compress::<Du<{ D::DU }>>();
+
+            let eq_set = get_eq_set::<{ D::DU }>(compressed_v);
+            assert!(
+                eq_set.to_vec().contains(&v),
+                "{desc}: {v} maps to incorrect set {:?}",
+                eq_set
+            );
+        }
+    }
+
+    #[test]
+    fn sets_match() {
+        eq_sets_match_test::<MlKem512>("du:10, MlKem512");
+        eq_sets_match_test::<MlKem768>("du:10, MlKem768");
+        eq_sets_match_test::<MlKem1024>("du:11, MlKem1024");
     }
 }
