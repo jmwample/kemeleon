@@ -23,13 +23,14 @@ jobs:
       run: cargo fmt --all -- --check
 
   udeps:
-    name: Unused Dependencies Check
+    name: Check for Unused Dependencies
     runs-on: "ubuntu-latest"
     steps:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@nightly
-    - name: Install and run udeps
+    - name: Install udeps
       run: cargo +nightly install cargo-udeps --locked
+    - name: run udeps
       run: cargo +nightly udeps --all-features --all-targets
 
  #   lint:
