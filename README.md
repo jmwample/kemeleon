@@ -33,6 +33,7 @@ Core features
 - [x] Implement complete Encapsulation Key encoding / decoding
 - [x] Implement and test ciphertext encoding / decoding
 - [ ] Nist vectors Integration tests
+- [ ] Ciphertext encoding determinism using hkdf, hmac-drbg, or something similar
 - [ ] Pass on public docs
 
 Cleanup
