@@ -1,7 +1,7 @@
+use crate::{fips, kemeleon::Encodable, EncodingSize, FipsEncodingSize, Transcode, ARR_LEN};
+
 use core::fmt::Debug;
 use std::{io::Error as IoError, marker::PhantomData};
-
-use crate::{fips, kemeleon::Encodable, EncodingSize, Transcode, ARR_LEN};
 
 use kem::{Decapsulate, Encapsulate};
 use ml_kem::{Ciphertext, Encoded, EncodedSizeUser, KemCore, SharedKey};
@@ -12,7 +12,7 @@ use rand_core::CryptoRngCore;
 // ========================================================================== //
 
 /// Number of retries to generate a key pair that satisfies the Kemeleon criteria.
-const MAX_RETRIES: usize = 64;
+pub(crate) const MAX_RETRIES: usize = 64;
 
 #[derive(Debug, PartialEq, PartialOrd)]
 pub struct Kemx<P>
@@ -25,9 +25,10 @@ where
 impl<P> Kemx<P>
 where
     P: ml_kem::KemCore + EncodingSize,
-    [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
+    [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
     [(); <P as EncodingSize>::ENCODED_SIZE]:,
     [(); <P as EncodingSize>::K]:,
+    [(); P::USIZE]:,
 {
     pub fn generate(rng: &mut impl CryptoRngCore) -> (KDecapsulationKey<P>, KEncapsulationKey<P>) {
         // random u8 for the most significant byte which will be less than 8 bits.
@@ -70,15 +71,16 @@ impl<P> KEncapsulationKey<P>
 where
     P: KemCore + EncodingSize,
     [(); P::FIPS_ENCODED_SIZE]:,
+    [(); P::USIZE]:,
 {
     // TODO: must use for now -- not sure it this will stay
     #[must_use]
     pub fn from_parts(t_hat: &[[u16; ARR_LEN]; P::K], rho: &[u8; 32], mask_byte: u8) -> Self {
-        let ek_fb = fips::byte_encode(rho, t_hat);
+        let ek_fb = fips::ek_encode(rho, t_hat);
         Self::from_fips_bytes(ek_fb, mask_byte)
     }
 
-    // TODO: should this be a Result cince a key of improper length could panic?
+    // TODO: should this be a Result since a key of improper length could panic?
     pub fn from_fips_bytes(ek_fb: impl AsRef<[u8]>, mask_byte: u8) -> Self {
         let ek_fb_e = Encoded::<<P as KemCore>::EncapsulationKey>::try_from(ek_fb.as_ref())
             .map_err(|e| IoError::other(format!("failed to convert to hybrid_array::Array: {e}")))
@@ -91,21 +93,35 @@ where
     }
 }
 
-impl<P> Encapsulate<EncodedCiphertext<P>, SharedKey<P>> for KEncapsulationKey<P>
+impl<P> Encapsulate<KEncodedCiphertext<P>, SharedKey<P>> for KEncapsulationKey<P>
 where
-    P: KemCore,
+    P: KemCore + EncodingSize,
+    [(); P::K]:,
+    [(); P::DU]:,
+    [(); P::ENCODED_SIZE]:,
+    [(); P::ENCODED_CT_SIZE]:,
+    [(); P::FIPS_ENCODED_SIZE]:,
 {
     type Error = IoError;
 
     fn encapsulate(
         &self,
         rng: &mut impl CryptoRngCore,
-    ) -> Result<(EncodedCiphertext<P>, SharedKey<P>), Self::Error> {
-        let (ek, ss) = self
-            .key
-            .encapsulate(rng)
-            .map_err(|_| IoError::other("failed encapsulation"))?;
-        Ok((EncodedCiphertext::<P>::from_fips(ek), ss))
+    ) -> Result<(KEncodedCiphertext<P>, SharedKey<P>), Self::Error> {
+        for _ in 0..MAX_RETRIES {
+            let (ek, ss) = self
+                .key
+                .encapsulate(rng)
+                .map_err(|_| IoError::other("failed encapsulation"))?;
+            let (success, ct) = KCiphertext::<P>::new(&ek, &ss)?;
+
+            if !success {
+                continue;
+            }
+
+            return Ok((KEncodedCiphertext(ct.bytes), ss));
+        }
+        panic!("failed to generate shared secret and encapsulate - you have a bad random number generator")
     }
 }
 
@@ -132,6 +148,36 @@ where
 }
 
 // ========================================================================== //
+// Ciphertext encoding
+// ========================================================================== //
+
+#[derive(Debug, PartialEq, PartialOrd)]
+pub struct KCiphertext<P>
+where
+    P: KemCore + EncodingSize,
+    [(); P::ENCODED_CT_SIZE]:,
+{
+    pub(crate) encoded: bool,
+    pub(crate) bytes: [u8; P::ENCODED_CT_SIZE],
+    pub(crate) fips: Ciphertext<P>,
+}
+
+pub struct KEncodedCiphertext<P>(pub(crate) [u8; P::ENCODED_CT_SIZE])
+where
+    P: KemCore + EncodingSize,
+    [(); P::ENCODED_CT_SIZE]:;
+
+impl<P> AsRef<[u8]> for KEncodedCiphertext<P>
+where
+    P: KemCore + EncodingSize,
+    [(); P::ENCODED_CT_SIZE]:,
+{
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+// ========================================================================== //
 // Decapsulation Key
 // ========================================================================== //
 
@@ -140,57 +186,25 @@ pub struct KDecapsulationKey<P>(P::DecapsulationKey)
 where
     P: KemCore;
 
-impl<P> Decapsulate<EncodedCiphertext<P>, SharedKey<P>> for KDecapsulationKey<P>
+impl<P> Decapsulate<KEncodedCiphertext<P>, SharedKey<P>> for KDecapsulationKey<P>
 where
-    P: KemCore,
+    P: KemCore + EncodingSize,
+    [(); P::K]:,
+    [(); P::DU]:,
+    [(); P::ENCODED_SIZE]:,
+    [(); P::ENCODED_CT_SIZE]:,
+    [(); P::FIPS_ENCODED_SIZE]:,
+    [(); P::FIPS_ENCODED_USIZE]:,
+    [(); P::FIPS_ENCODED_CT_SIZE]:,
 {
-    type Error = <P::DecapsulationKey as Decapsulate<ml_kem::Ciphertext<P>, SharedKey<P>>>::Error;
+    type Error = IoError; //<P::DecapsulationKey as Decapsulate<ml_kem::Ciphertext<P>, SharedKey<P>>>::Error;
 
-    fn decapsulate(
-        &self,
-        encapsulated_key: &EncodedCiphertext<P>,
-    ) -> Result<SharedKey<P>, Self::Error> {
-        let ek = encapsulated_key.as_fips();
-        self.0.decapsulate(ek)
-    }
-}
-
-// ========================================================================== //
-// Ciphertext encoding
-// ========================================================================== //
-
-#[derive(Debug, PartialEq, PartialOrd)]
-pub struct EncodedCiphertext<P>
-where
-    P: KemCore,
-{
-    pub(crate) bytes: Vec<u8>,
-    pub(crate) _p: PhantomData<P>,
-}
-
-// TODO this is likely incorrect / incomplete i just made it this way so it would
-// compile so I could get tests compiling first.
-impl<P> Transcode for EncodedCiphertext<P>
-where
-    P: KemCore,
-{
-    type Fips = ml_kem::Ciphertext<P>;
-
-    fn as_fips(&self) -> &Self::Fips {
-        #[allow(deprecated)]
-        Self::Fips::from_slice(&self.bytes)
-    }
-
-    fn to_fips(self) -> Self::Fips {
-        #[allow(deprecated)]
-        Ciphertext::<P>::clone_from_slice(&self.bytes)
-    }
-
-    fn from_fips(t: Self::Fips) -> Self {
-        Self {
-            bytes: t.to_vec(),
-            _p: PhantomData,
-        }
+    fn decapsulate(&self, ciphertext: &KEncodedCiphertext<P>) -> Result<SharedKey<P>, Self::Error> {
+        let ct = KCiphertext::decode(ciphertext)?;
+        let k_send = ct.fips;
+        self.0
+            .decapsulate(&k_send)
+            .map_err(|e| IoError::other(format!("failed to decapsulate: {e:?}")))
     }
 }
 
@@ -203,9 +217,14 @@ mod test {
     fn generate_trial<P>()
     where
         P: ml_kem::KemCore + EncodingSize,
-        [(); <P as EncodingSize>::FIPS_ENCODED_SIZE]:,
-        [(); <P as EncodingSize>::ENCODED_SIZE]:,
-        [(); <P as EncodingSize>::K]:,
+        [(); P::K]:,
+        [(); P::DU]:,
+        [(); P::USIZE]:,
+        [(); P::ENCODED_SIZE]:,
+        [(); P::ENCODED_CT_SIZE]:,
+        [(); P::FIPS_ENCODED_SIZE]:,
+        [(); P::FIPS_ENCODED_USIZE]:,
+        [(); P::FIPS_ENCODED_CT_SIZE]:,
     {
         let mut rng = rand::thread_rng();
         let (dk, ek) = Kemx::<P>::generate(&mut rng);

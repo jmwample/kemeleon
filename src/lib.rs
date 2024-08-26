@@ -6,13 +6,19 @@
 // do not warn about downcasting
 // #![deny(missing_docs)] // Require all public interfaces to be documented
 
-//! Implementation of Kemeleon Encodings
+//! # Kemeleon: Obfuscated ML-KEM Encodings
 //!
 //! [Paper](https://eprint.iacr.org/2024/1086.pdf).
 //!
+//! ## ⚠️ Security Warning
+//!
+//! The implementation contained in this crate has never been independently audited!
+//!
+//! **USE AT YOUR OWN RISK!**
+//!
 //! ## Usage
 //!
-//! ```
+//! ```rust ignore
 //! use kemeleon::MlKem512;
 //! use kem::{Encapsulate, Decapsulate};
 //!
@@ -34,6 +40,10 @@
 //! ## Explanation
 //!
 //! #### Encapsulation Keys
+//!
+//! $$
+//! Kemeleon.VectorEncode(a):
+//! $$
 //!
 //! ```txt ignore
 //! Kemeleon.Encode(a):
@@ -57,15 +67,37 @@
 //!
 //! #### Ciphertext
 //!
-//! ```txt ignore
-//! Kemeleon.EncodeCtxt(c = (c1 || c2)):
-//!
-//! ```
+// $$
+// EncodeCiphertext(c = (c1 || c2)): \\
+//
+// for i in
+//
+// $$
+//
+// = \[0 .. k*n\]: \\\
+//     x \xleftarrow $ \{ a: Decomp(Comp(u\[i\] + a, d_u), d_u)=u\[i\] \}
+// \begin{aligned}
+// \end{aligned}
 //!
 //! ```txt ignore
 //! Kemeleon.DecodeCtxt(r):
 //!
 //! ```
+//!
+//! ## Minimum Supported Rust Version (MSRV)
+//!
+//! The Minimum Supported Rust Versions (MSRV) for this crate will be listed
+//! here (TODO). This version will be ensured by the test and build steps in the
+//! CI pipeline.
+//!
+//! The MSRV can be changed in the future, but it will be done with a minor
+//! version bump. We will not increase MSRV on PATCH releases, though
+//! downstream dependencies might.
+//!
+//! We won't increase MSRV just because we can: we'll only do so when we have a
+//! reason. (We don't guarantee that you'll agree with our reasoning; only that
+//! it will exist.)
+//!
 #![feature(generic_const_exprs)]
 
 use core::fmt::Debug;
@@ -86,6 +118,12 @@ impl Debug for FieldElement {
 impl AsRef<u16> for FieldElement {
     fn as_ref(&self) -> &u16 {
         &self.0
+    }
+}
+
+impl AsMut<u16> for FieldElement {
+    fn as_mut(&mut self) -> &mut u16 {
+        &mut self.0
     }
 }
 
@@ -126,6 +164,17 @@ pub trait Transcode {
 // Encoding Sizes and Generics
 // ========================================================================== //
 
+/// Core sizes used for encoding ML KEM Encapsulation Keys and Ciphertexts.
+///
+/// Many of the Arrray Sizes defined here are based off of the length of
+/// the result of a Kemeleon `VectorEncode()` function. For a vector of
+/// `K` Field elements with $n=256$ values per field element this is found
+/// by:
+///
+/// $$
+/// HIGH\\\_ORDER\\\_BIT = \left\lceil log_{2}(q^{n\cdot k}+1) - 1 \right\rceil
+/// $$
+///
 pub trait EncodingSize {
     /// Number of bits used to represent field elements
     const USIZE: usize = 12_usize;
@@ -136,12 +185,6 @@ pub trait EncodingSize {
     /// Number of field elements per equation.
     const K: usize;
 
-    /// Index (0-based index) of the high order bit used when computing the kemeleon byte
-    /// representation. Used to determine if the encoded key satisfies the sampling
-    /// strategy.
-    ///
-    /// Computed as: $\left\lceil log_{2}(q^{n\cdot k}+1) - 1 \right\rceil$
-    const HIGH_ORDER_BIT: u64;
     /// Bitmask for the high order byte which will be less than a full byte of
     /// random bits when encoded.
     ///
@@ -151,9 +194,9 @@ pub trait EncodingSize {
     /// random bits when encoded. Inversion of [`EncodingSize::MSB_BITMASK`].
     const MSB_BITMASK_INV: u8 = !Self::MSB_BITMASK;
 
-    const ETA1: usize;
-    const ETA2: usize;
+    /// The bit width of encoded integers in the `u` vector in a ciphertext
     const DU: usize;
+    /// The bit width of encoded integers in the `v` vector in a ciphertext
     const DV: usize;
 
     /// Number of bytes for just `t_hat` values in a kemeleon encoded value
@@ -164,49 +207,51 @@ pub trait EncodingSize {
     ///
     /// Computed as: $T\\_HAT\\_LEN + RHO\\_LEN$
     const ENCODED_SIZE: usize = Self::T_HAT_LEN + RHO_LEN;
-    /// Number of bytes required to represent the object when not encoded
-    const UNENCODED_SIZE: usize = RHO_LEN + ARR_LEN * Self::K;
-    /// Number of bytes required to represent the FIPS encoded Encapsulation Key
-    const FIPS_ENCODED_SIZE: usize = RHO_LEN + Self::K * 12 * 32;
+
+    /// Size of the U value of the kemeleon encoded ciphertext. Matches `T_HAT_LEN`.
+    const ENCODED_USIZE: usize = Self::T_HAT_LEN;
+    /// Size of the V value of the Kemeleon encoded ciphertext. N values of Dv Bit size.
+    /// The number of bytes is computed as $ ENCODED_VSIZE = 256 * D_v / 8  for n=256 $
+    const ENCODED_VSIZE: usize = 32 * Self::DV;
+    /// Size of the combined kemeleon encoded ciphertext.
+    const ENCODED_CT_SIZE: usize = Self::ENCODED_USIZE + Self::ENCODED_VSIZE;
 }
+
+trait FipsEncodingSize: EncodingSize {
+    const FIPS_T_HAT_LEN: usize = Self::K * 12 * 32;
+    const FIPS_ENCODED_SIZE: usize = Self::FIPS_T_HAT_LEN + RHO_LEN;
+
+    const FIPS_ENCODED_USIZE: usize = 32 * Self::DU * Self::K;
+    const FIPS_ENCODED_VSIZE: usize = 32 * Self::DV;
+    const FIPS_ENCODED_CT_SIZE: usize = Self::FIPS_ENCODED_USIZE + Self::FIPS_ENCODED_VSIZE;
+}
+impl<T: EncodingSize> FipsEncodingSize for T {}
 
 impl EncodingSize for ml_kem::MlKem512 {
     const K: usize = 2;
-
-    const T_HAT_LEN: usize = 749;
-    const MSB_BITMASK: u8 = 0b1110_0000;
-    const HIGH_ORDER_BIT: u64 = 5990;
-
-    const ETA1: usize = 3;
-    const ETA2: usize = 2;
     const DU: usize = 10;
     const DV: usize = 4;
+
+    const T_HAT_LEN: usize = 749;
+    const MSB_BITMASK: u8 = 0b1100_0000;
 }
 
 impl EncodingSize for ml_kem::MlKem768 {
     const K: usize = 3;
-
-    const T_HAT_LEN: usize = 1124;
-    const MSB_BITMASK: u8 = 0b1111_1110;
-    const HIGH_ORDER_BIT: u64 = 8986;
-
-    const ETA1: usize = 2;
-    const ETA2: usize = 2;
     const DU: usize = 10;
     const DV: usize = 4;
+
+    const T_HAT_LEN: usize = 1124;
+    const MSB_BITMASK: u8 = 0b1111_1100;
 }
 
 impl EncodingSize for ml_kem::MlKem1024 {
     const K: usize = 4;
-
-    const T_HAT_LEN: usize = 1498;
-    const MSB_BITMASK: u8 = 0b1111_1000;
-    const HIGH_ORDER_BIT: u64 = 11980;
-
-    const ETA1: usize = 2;
-    const ETA2: usize = 2;
     const DU: usize = 11;
     const DV: usize = 5;
+
+    const T_HAT_LEN: usize = 1498;
+    const MSB_BITMASK: u8 = 0b1110_0000;
 }
 
 // ========================================================================== //
