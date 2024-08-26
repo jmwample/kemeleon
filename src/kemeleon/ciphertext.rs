@@ -172,7 +172,9 @@ fn recover_rand<const DU: usize>(i: u16, rng: &mut impl CryptoRngCore) -> u16 {
     let mut compressed_i = i;
     compressed_i.compress::<Du<DU>>();
     let eq_set = get_eq_set::<DU>(compressed_i);
-    *eq_set.choose(rng).expect("no equivalence found, should be impossible")
+    *eq_set
+        .choose(rng)
+        .expect("no equivalence found, should be impossible")
 }
 
 fn rejection_sample<R: CryptoRng + RngCore>(c2: &[u8], rng: &mut R, dv: usize) -> bool {
