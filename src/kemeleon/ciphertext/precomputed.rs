@@ -7,8 +7,8 @@ pub(crate) fn get_eq_set<const USIZE: usize>(u_i: u16) -> &'static [u16] {
     }
 
     match USIZE {
-        10 => &EQ_SET_10[u_i as usize],
-        11 => &EQ_SET_11[u_i as usize],
+        10 => EQ_SET_10[u_i as usize],
+        11 => EQ_SET_11[u_i as usize],
         _ => &[],
     }
 }
@@ -3104,7 +3104,7 @@ mod test {
 
     fn eq_set_completeness_test(desc: &str, eq_set: &[&[u16]]) {
         let mut s = Vec::new();
-        for v in eq_set.iter() {
+        for v in eq_set {
             s.append(&mut v.to_vec());
         }
 
@@ -3115,7 +3115,7 @@ mod test {
         );
 
         let expected: Vec<u16> = (0_u16..FieldElement::Q).collect();
-        s.sort();
+        s.sort_unstable();
         assert_eq!(
             expected, s,
             "{desc}: doesn't contain all values, or contains repeated values"
@@ -3140,8 +3140,7 @@ mod test {
             let eq_set = get_eq_set::<{ D::DU }>(compressed_v);
             assert!(
                 eq_set.to_vec().contains(&v),
-                "{desc}: {v} maps to incorrect set {:?}",
-                eq_set
+                "{desc}: {v} maps to incorrect set {eq_set:?}",
             );
         }
     }
