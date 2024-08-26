@@ -84,6 +84,8 @@ where
         Ok((encodable, kemeleon_ct))
     }
 
+    // TODO: find a good way to expose this
+    #[allow(dead_code)]
     fn new_from_rng<R: RngCore + CryptoRng>(
         fips_ct: &ml_kem::Ciphertext<P>,
         rng: &mut R,
@@ -107,7 +109,7 @@ where
         r1.as_flattened_mut()
             .iter_mut()
             .decompress::<Du<{ P::DU }>>();
-        for mut u_i in r1.as_flattened_mut() {
+        for u_i in r1.as_flattened_mut().iter_mut() {
             *u_i = recover_rand::<{ P::DU }>(*u_i, rng);
         }
 
