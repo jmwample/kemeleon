@@ -1,6 +1,7 @@
 pub use crate::mlkem::KCiphertext as Ciphertext;
 /// Key used for encapsulation
 pub use crate::mlkem::KEncapsulationKey as EncapsulationKey;
+pub use crate::mlkem::KDecapsulationKey as DecapsulationKey;
 // pub use crate::mlkem::KEncodedCiphertext as EncodedCiphertext;
 use crate::{EncodingSize, FieldElement, FipsEncodingSize};
 
@@ -37,7 +38,7 @@ pub trait Encodable: Encode {
     fn satisfies_sampling(&self) -> bool;
 }
 
-pub fn vector_encode<P>(p: impl AsRef<[u16]>, mut c: impl AsMut<[u8]>) -> Result<bool, IoError>
+pub(crate) fn vector_encode<P>(p: impl AsRef<[u16]>, mut c: impl AsMut<[u8]>) -> Result<bool, IoError>
 where
     P: KemCore + EncodingSize,
     [(); P::K]:,
@@ -71,7 +72,7 @@ where
     Ok(dst[P::T_HAT_LEN - 1] & P::MSB_BITMASK == 0)
 }
 
-pub fn vector_decode<P>(c: impl AsRef<[u8]>, mut p: impl AsMut<[u16]>) -> Result<(), IoError>
+pub(crate) fn vector_decode<P>(c: impl AsRef<[u8]>, mut p: impl AsMut<[u16]>) -> Result<(), IoError>
 where
     P: KemCore + EncodingSize,
     [(); P::K]:,

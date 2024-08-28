@@ -1,6 +1,8 @@
 #![cfg(feature = "deterministic")]
 
-use ml_kem::*;
+// use ml_kem::*;
+use kemeleon::{Ciphertext, EncodingSize, MlKem1024, MlKem512, MlKem768};
+use ml_kem::{EncodedSizeUser, KemCore};
 
 use ::kem::Decapsulate;
 use hybrid_array::Array;
@@ -56,7 +58,7 @@ fn verify_decap_group(tg: &acvp::DecapTestGroup) {
     }
 }
 
-fn verify_decap<K: KemCore>(tc: &acvp::DecapTestCase, dk_slice: &[u8]) {
+fn verify_decap<K: KemCore + EncodingSize>(tc: &acvp::DecapTestCase, dk_slice: &[u8]) {
     let dk_bytes = Encoded::<K::DecapsulationKey>::try_from(dk_slice).unwrap();
     let dk = K::DecapsulationKey::from_bytes(&dk_bytes);
 

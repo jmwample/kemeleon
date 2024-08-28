@@ -3,13 +3,16 @@ use crate::{fips, kemeleon::Encodable, EncodingSize, FipsEncodingSize, Transcode
 use core::fmt::Debug;
 use std::{io::Error as IoError, marker::PhantomData};
 
+#[cfg(feature = "deterministic")]
+use ml_kem::B32;
+use ml_kem::{Ciphertext, Encoded, EncodedSizeUser, KemCore, SharedKey, EncapsulateDeterministic};
 use kem::{Decapsulate, Encapsulate};
-use ml_kem::{Ciphertext, Encoded, EncodedSizeUser, KemCore, SharedKey};
 use rand_core::CryptoRngCore;
 
 // ========================================================================== //
 // Kem Equivalent object
 // ========================================================================== //
+
 
 /// Number of retries to generate a key pair that satisfies the Kemeleon criteria.
 pub(crate) const MAX_RETRIES: usize = 64;
@@ -58,6 +61,8 @@ where
 // TODO: store the local representation created by from_fips so that we don't
 // have to compute it if we re-use the key for some reason (or call as_bytes
 // more than once).
+/// An `EncapsulationKey` provides the ability to encapsulate a shared key so that
+/// it can only be decapsulated by the holder of the corresponding decapsulation key.
 #[derive(Debug, PartialEq, PartialOrd)]
 pub struct KEncapsulationKey<P>
 where
@@ -108,10 +113,38 @@ where
         &self,
         rng: &mut impl CryptoRngCore,
     ) -> Result<(KEncodedCiphertext<P>, SharedKey<P>), Self::Error> {
+        let (ek, ss) = self
+            .key
+            .encapsulate(rng)
+            .map_err(|_| IoError::other("failed encapsulation"))?;
+        let (success, ct) = KCiphertext::<P>::new(&ek, &ss)?;
+
+        if !success {
+            Err(NotEncodable)
+        }
+
+        return Ok((KEncodedCiphertext(ct.bytes), ss));
+    }
+}
+
+#[cfg(feature = "deterministic")]
+impl<P> EncapsulateDeterministic<KEncodedCiphertext<P>, SharedKey<P>> for KEncapsulationKey<P>
+where
+    P: KemCore + EncodingSize,
+    [(); P::K]:,
+    [(); P::DU]:,
+    [(); P::ENCODED_SIZE]:,
+    [(); P::ENCODED_CT_SIZE]:,
+    [(); P::FIPS_ENCODED_SIZE]:,
+{
+    type Error = IoError;
+
+    // Required method
+    fn encapsulate_deterministic(&self, m: &B32) -> Result<(KEncodedCiphertext<P>, SharedKey<P>), Self::Error> {
         for _ in 0..MAX_RETRIES {
             let (ek, ss) = self
                 .key
-                .encapsulate(rng)
+                .encapsulate_deterministic(m)
                 .map_err(|_| IoError::other("failed encapsulation"))?;
             let (success, ct) = KCiphertext::<P>::new(&ek, &ss)?;
 
@@ -151,6 +184,7 @@ where
 // Ciphertext encoding
 // ========================================================================== //
 
+/// A ciphertext produced by the KEM `K`
 #[derive(Debug, PartialEq, PartialOrd)]
 pub struct KCiphertext<P>
 where
@@ -181,6 +215,7 @@ where
 // Decapsulation Key
 // ========================================================================== //
 
+/// A `DecapsulationKey` provides the ability to generate a new key pair, and decapsulate an encapsulated shared key.
 #[derive(Debug, PartialEq, PartialOrd)]
 pub struct KDecapsulationKey<P>(P::DecapsulationKey)
 where

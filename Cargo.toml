@@ -10,6 +10,7 @@ rustdoc-args = [
 ]
 
 [features]
+default=["deterministic"]
 deterministic = ["ml-kem/deterministic"]
 
 [dependencies]
