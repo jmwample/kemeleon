@@ -2,7 +2,8 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![warn(clippy::pedantic)] // Be pedantic by default
 #![warn(clippy::integer_division_remainder_used)] // Be judicious about using `/` and `%`
-#![allow(clippy::cast_possible_truncation)] // do not warn about downcasting
+#![allow(clippy::cast_possible_truncation)]
+// do not warn about downcasting
 // #![deny(missing_docs)] // Require all public interfaces to be documented
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]

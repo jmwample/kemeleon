@@ -1,18 +1,18 @@
+use crate::EncodeError;
 use crate::{fips, kemeleon::Encodable, EncodingSize, FipsEncodingSize, Transcode, ARR_LEN};
 
 use core::fmt::Debug;
-use std::{io::Error as IoError, marker::PhantomData};
+use std::marker::PhantomData;
 
-#[cfg(feature = "deterministic")]
-use ml_kem::B32;
-use ml_kem::{Ciphertext, Encoded, EncodedSizeUser, KemCore, SharedKey, EncapsulateDeterministic};
 use kem::{Decapsulate, Encapsulate};
+use ml_kem::{Ciphertext, Encoded, EncodedSizeUser, KemCore, SharedKey};
+#[cfg(feature = "deterministic")]
+use ml_kem::{EncapsulateDeterministic, B32};
 use rand_core::CryptoRngCore;
 
 // ========================================================================== //
 // Kem Equivalent object
 // ========================================================================== //
-
 
 /// Number of retries to generate a key pair that satisfies the Kemeleon criteria.
 pub(crate) const MAX_RETRIES: usize = 64;
@@ -88,7 +88,7 @@ where
     // TODO: should this be a Result since a key of improper length could panic?
     pub fn from_fips_bytes(ek_fb: impl AsRef<[u8]>, mask_byte: u8) -> Self {
         let ek_fb_e = Encoded::<<P as KemCore>::EncapsulationKey>::try_from(ek_fb.as_ref())
-            .map_err(|e| IoError::other(format!("failed to convert to hybrid_array::Array: {e}")))
+            .map_err(|e| EncodeError::MlKemError(e))
             .unwrap();
         let key = <P as KemCore>::EncapsulationKey::from_bytes(&ek_fb_e);
         Self {
@@ -107,7 +107,7 @@ where
     [(); P::ENCODED_CT_SIZE]:,
     [(); P::FIPS_ENCODED_SIZE]:,
 {
-    type Error = IoError;
+    type Error = EncodeError;
 
     fn encapsulate(
         &self,
@@ -116,11 +116,11 @@ where
         let (ek, ss) = self
             .key
             .encapsulate(rng)
-            .map_err(|_| IoError::other("failed encapsulation"))?;
+            .map_err(|_| EncodeError::EncapsulationError("ML-KEM encapsulation error".into()))?;
         let (success, ct) = KCiphertext::<P>::new(&ek, &ss)?;
 
         if !success {
-            Err(NotEncodable)
+            return Err(EncodeError::NotEncodable);
         }
 
         return Ok((KEncodedCiphertext(ct.bytes), ss));
@@ -137,15 +137,18 @@ where
     [(); P::ENCODED_CT_SIZE]:,
     [(); P::FIPS_ENCODED_SIZE]:,
 {
-    type Error = IoError;
+    type Error = EncodeError;
 
     // Required method
-    fn encapsulate_deterministic(&self, m: &B32) -> Result<(KEncodedCiphertext<P>, SharedKey<P>), Self::Error> {
+    fn encapsulate_deterministic(
+        &self,
+        m: &B32,
+    ) -> Result<(KEncodedCiphertext<P>, SharedKey<P>), Self::Error> {
         for _ in 0..MAX_RETRIES {
             let (ek, ss) = self
                 .key
                 .encapsulate_deterministic(m)
-                .map_err(|_| IoError::other("failed encapsulation"))?;
+                .map_err(|_| EncodeError::EncapsulationError("failed encapsulation".into()))?;
             let (success, ct) = KCiphertext::<P>::new(&ek, &ss)?;
 
             if !success {
@@ -232,14 +235,14 @@ where
     [(); P::FIPS_ENCODED_USIZE]:,
     [(); P::FIPS_ENCODED_CT_SIZE]:,
 {
-    type Error = IoError; //<P::DecapsulationKey as Decapsulate<ml_kem::Ciphertext<P>, SharedKey<P>>>::Error;
+    type Error = EncodeError;
 
     fn decapsulate(&self, ciphertext: &KEncodedCiphertext<P>) -> Result<SharedKey<P>, Self::Error> {
         let ct = KCiphertext::decode(ciphertext)?;
         let k_send = ct.fips;
         self.0
             .decapsulate(&k_send)
-            .map_err(|e| IoError::other(format!("failed to decapsulate: {e:?}")))
+            .map_err(|e| EncodeError::DecapsulationError(format!("failed to decapsulate: {e:?}")))
     }
 }
 

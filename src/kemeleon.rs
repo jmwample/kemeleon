@@ -1,12 +1,11 @@
 pub use crate::mlkem::KCiphertext as Ciphertext;
+pub use crate::mlkem::KDecapsulationKey as DecapsulationKey;
 /// Key used for encapsulation
 pub use crate::mlkem::KEncapsulationKey as EncapsulationKey;
-pub use crate::mlkem::KDecapsulationKey as DecapsulationKey;
 // pub use crate::mlkem::KEncodedCiphertext as EncodedCiphertext;
-use crate::{EncodingSize, FieldElement, FipsEncodingSize};
+use crate::{EncodeError, EncodingSize, FieldElement, FipsEncodingSize};
 
 use core::cmp::min;
-use std::io::Error as IoError;
 
 use ml_kem::KemCore;
 use num_bigint::BigUint;
@@ -38,14 +37,17 @@ pub trait Encodable: Encode {
     fn satisfies_sampling(&self) -> bool;
 }
 
-pub(crate) fn vector_encode<P>(p: impl AsRef<[u16]>, mut c: impl AsMut<[u8]>) -> Result<bool, IoError>
+pub(crate) fn vector_encode<P>(
+    p: impl AsRef<[u16]>,
+    mut c: impl AsMut<[u8]>,
+) -> Result<bool, EncodeError>
 where
     P: KemCore + EncodingSize,
     [(); P::K]:,
 {
     let dst = c.as_mut();
     if dst.len() < P::T_HAT_LEN {
-        return Err(IoError::other(format!(
+        return Err(EncodeError::EncodeError(format!(
             "invalid dst array size. {} < {}",
             P::T_HAT_LEN,
             dst.len()
@@ -72,14 +74,20 @@ where
     Ok(dst[P::T_HAT_LEN - 1] & P::MSB_BITMASK == 0)
 }
 
-pub(crate) fn vector_decode<P>(c: impl AsRef<[u8]>, mut p: impl AsMut<[u16]>) -> Result<(), IoError>
+pub(crate) fn vector_decode<P>(
+    c: impl AsRef<[u8]>,
+    mut p: impl AsMut<[u16]>,
+) -> Result<(), EncodeError>
 where
     P: KemCore + EncodingSize,
     [(); P::K]:,
     [(); P::FIPS_ENCODED_SIZE]:,
 {
     if c.as_ref().len() < <P as EncodingSize>::T_HAT_LEN {
-        return Err(IoError::other("incorrect ciphertext length"));
+        return Err(EncodeError::DecodeError(format!(
+            "incorrect ciphertext length {}",
+            c.as_ref().len()
+        )));
     }
 
     let base = BigUint::from(FieldElement::Q);

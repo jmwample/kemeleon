@@ -1,7 +1,7 @@
 #![cfg(feature = "deterministic")]
 
-use kemeleon::{MlKem512, MlKem768, MlKem1024, Encode, EncodingSize};
-use ml_kem::{KemCore, EncodedSizeUser};
+use kemeleon::{Encode, EncodingSize, MlKem1024, MlKem512, MlKem768};
+use ml_kem::{EncodedSizeUser, KemCore};
 
 use hybrid_array::Array;
 use std::{fs::read_to_string, path::PathBuf};

@@ -1,8 +1,6 @@
 use super::{vector_decode, vector_encode, Encode};
 use crate::fips;
-use crate::{Barr8, EncodingSize, FipsEncodingSize, ARR_LEN};
-
-use std::io::Error as IoError;
+use crate::{Barr8, EncodeError, EncodingSize, FipsEncodingSize, ARR_LEN};
 
 use ml_kem::KemCore;
 use rand::{seq::SliceRandom, CryptoRng, RngCore};
@@ -38,17 +36,17 @@ where
     type ET = Barr8<{ P::ENCODED_CT_SIZE }>;
 
     /// Error Type returned on failed decode
-    type Error = IoError;
+    type Error = EncodeError;
 
     fn as_bytes(&self) -> Self::ET {
         self.0
     }
 
-    fn try_from_bytes(b: impl AsRef<[u8]>) -> Result<Self, IoError> {
+    fn try_from_bytes(b: impl AsRef<[u8]>) -> Result<Self, Self::Error> {
         if b.as_ref().is_empty() {
-            return Err(IoError::other("empty bytestring provided"));
+            return Err(EncodeError::ParseError("empty bytestring provided".into()));
         } else if b.as_ref().len() < P::ENCODED_CT_SIZE {
-            return Err(IoError::other("bad bytestring provided"));
+            return Err(EncodeError::ParseError("bytestring too short".into()));
         }
         let mut arr = [0u8; P::ENCODED_CT_SIZE];
         arr.copy_from_slice(&b.as_ref()[..P::ENCODED_CT_SIZE]);
@@ -69,7 +67,7 @@ where
     pub(crate) fn new(
         fips_ct: &ml_kem::Ciphertext<P>,
         ss: &ml_kem::SharedKey<P>,
-    ) -> Result<(bool, Self), IoError> {
+    ) -> Result<(bool, Self), EncodeError> {
         let mut kemeleon_ct = Self {
             encoded: false,
             bytes: [0u8; P::ENCODED_CT_SIZE],
@@ -89,7 +87,7 @@ where
     fn new_from_rng<R: RngCore + CryptoRng>(
         fips_ct: &ml_kem::Ciphertext<P>,
         rng: &mut R,
-    ) -> Result<(bool, Self), IoError> {
+    ) -> Result<(bool, Self), EncodeError> {
         let mut kemeleon_ct = Self {
             encoded: false,
             bytes: [0u8; P::ENCODED_CT_SIZE],
@@ -100,7 +98,7 @@ where
         Ok((encodable, kemeleon_ct))
     }
 
-    fn encode<R: RngCore + CryptoRng>(&mut self, rng: &mut R) -> Result<bool, IoError> {
+    fn encode<R: RngCore + CryptoRng>(&mut self, rng: &mut R) -> Result<bool, EncodeError> {
         // split the u and v elements
         let (c1, c2) = split_fips_ct::<P>(&self.fips);
         let mut r1: [[u16; ARR_LEN]; P::K] = fips::byte_decode::<P, { P::DU }>(&c1);
@@ -124,7 +122,7 @@ where
         Ok(success)
     }
 
-    pub(crate) fn decode(c: impl AsRef<[u8]>) -> Result<Self, IoError>
+    pub(crate) fn decode(c: impl AsRef<[u8]>) -> Result<Self, EncodeError>
     where
         [(); P::FIPS_ENCODED_USIZE]:,
         [(); P::FIPS_ENCODED_CT_SIZE]:,
@@ -135,7 +133,7 @@ where
 
         let mut values = [[0u16; ARR_LEN]; P::K];
         vector_decode::<P>(&c1, values.as_flattened_mut())
-            .map_err(|e| IoError::other(format!("error occured while decoding {e}")))?;
+            .map_err(|e| EncodeError::DecodeError(format!("error occured while decoding {e}")))?;
 
         // re-compress the values
         let c1 = values.as_flattened_mut();
@@ -148,7 +146,7 @@ where
         // ml_kem::Ciphertext = c1 || c2
         fips_ct[P::FIPS_ENCODED_USIZE..].copy_from_slice(c2);
         let fips = ml_kem::Ciphertext::<P>::try_from(&fips_ct[..])
-            .map_err(|_| IoError::other("failed to parse as ciphertext"))?;
+            .map_err(|e| EncodeError::MlKemError(e))?;
 
         Ok(Self {
             encoded: true,
