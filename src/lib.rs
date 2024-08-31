@@ -131,7 +131,7 @@ pub trait EncodingSize {
     const ENCODED_CT_SIZE: usize = Self::ENCODED_USIZE + Self::ENCODED_VSIZE;
 }
 
-trait FipsEncodingSize: EncodingSize {
+pub trait FipsEncodingSize: EncodingSize {
     const FIPS_T_HAT_LEN: usize = Self::K * 12 * 32;
     const FIPS_ENCODED_SIZE: usize = Self::FIPS_T_HAT_LEN + RHO_LEN;
 
@@ -180,3 +180,16 @@ pub type MlKem768 = mlkem::Kemx<ml_kem::MlKem768>;
 
 /// ML-KEM with the parameter set for security category 5, corresponding to key search on a block cipher with a 256-bit key.
 pub type MlKem1024 = mlkem::Kemx<ml_kem::MlKem1024>;
+
+impl<P> EncodingSize for mlkem::Kemx<P>
+where
+    P: ml_kem::KemCore + EncodingSize
+{
+    const K: usize = P::K;
+    const DU: usize = P::DU;
+    const DV: usize = P::DV;
+
+    const T_HAT_LEN: usize = P::T_HAT_LEN;
+    const MSB_BITMASK: u8 = P::MSB_BITMASK;
+}
+

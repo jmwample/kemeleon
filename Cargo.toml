@@ -21,6 +21,7 @@ hybrid-array = "0.2.0-rc.8"
 rand_core = "0.6.4"
 kem = "0.3.0-pre.0"
 lazy_static = "1.5.0"
+typenum = "1.17.0"
 
 # hmac-drbg
 hmac = "0.12.1"

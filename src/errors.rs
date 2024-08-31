@@ -30,3 +30,9 @@ impl std::fmt::Display for EncodeError {
         }
     }
 }
+
+impl From<TryFromSliceError> for EncodeError {
+    fn from(e: TryFromSliceError) -> Self {
+        EncodeError::MlKemError(e)
+    }
+}

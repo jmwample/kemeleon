@@ -1,10 +1,11 @@
-use crate::EncodeError;
 use crate::{fips, kemeleon::Encodable, EncodingSize, FipsEncodingSize, Transcode, ARR_LEN};
+use crate::{Encode, EncodeError};
 
 use core::fmt::Debug;
 use std::marker::PhantomData;
 
 use kem::{Decapsulate, Encapsulate};
+use hybrid_array::typenum::U32;
 use ml_kem::{Ciphertext, Encoded, EncodedSizeUser, KemCore, SharedKey};
 #[cfg(feature = "deterministic")]
 use ml_kem::{EncapsulateDeterministic, B32};
@@ -33,7 +34,7 @@ where
     [(); <P as EncodingSize>::K]:,
     [(); P::USIZE]:,
 {
-    pub fn generate(rng: &mut impl CryptoRngCore) -> (KDecapsulationKey<P>, KEncapsulationKey<P>) {
+    pub fn generate_priv(rng: &mut impl CryptoRngCore) -> (KDecapsulationKey<P>, KEncapsulationKey<P>) {
         // random u8 for the most significant byte which will be less than 8 bits.
         let msb_rand = rng.next_u32() as u8;
 
@@ -51,6 +52,31 @@ where
             continue;
         }
         panic!("failed to generate key - you have a bad random number generator")
+    }
+}
+
+impl<P> KemCore for Kemx<P>
+where
+    P: ml_kem::KemCore + EncodingSize,
+    [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
+    [(); <P as EncodingSize>::ENCODED_SIZE]:,
+    [(); <P as EncodingSize>::K]:,
+    [(); P::USIZE]:,
+{
+    type SharedKeySize = P::SharedKeySize;
+    type CiphertextSize = P::CiphertextSize;
+    type DecapsulationKey = KDecapsulationKey<P>;
+    type EncapsulationKey = KEncapsulationKey<P>;
+
+    fn generate(rng: &mut impl CryptoRngCore) -> (Self::DecapsulationKey, Self::EncapsulationKey) {
+        Self::generate_priv(rng)
+    }
+
+    #[cfg(feature="deterministic")]
+    fn generate_deterministic(d: &B32, z: &B32)
+            -> (Self::DecapsulationKey, Self::EncapsulationKey) {
+        let (dk, ek) = P::generate_deterministic(d, z);
+        (KDecapsulationKey(dk), KEncapsulationKey::<P>{key: ek, byte: 0x00_u8})
     }
 }
 
@@ -183,6 +209,21 @@ where
     }
 }
 
+// impl<P> EncodedSizeUser for KEncapsulationKey<P>
+// where
+//     P: KemCore + EncodingSize,
+// {
+//     type EncodedSize = typenum::U749;
+// 
+//     fn as_bytes(&self) -> Encoded<Self> {
+//         
+//     }
+// 
+//     fn from_bytes(enc: &Encoded<Self>) -> Self {
+//         
+//     }
+// }
+
 // ========================================================================== //
 // Ciphertext encoding
 // ========================================================================== //
@@ -211,6 +252,65 @@ where
 {
     fn as_ref(&self) -> &[u8] {
         &self.0
+    }
+}
+
+impl<P> From<[u8; P::ENCODED_CT_SIZE]> for KEncodedCiphertext<P>
+where
+    P: KemCore + EncodingSize,
+    [(); P::ENCODED_CT_SIZE]:,
+{
+    fn from(value: [u8; P::ENCODED_CT_SIZE]) -> Self {
+        KEncodedCiphertext(value)
+    }
+}
+
+impl<P> From<[u8; P::ENCODED_CT_SIZE]> for KCiphertext<P>
+where
+    P: KemCore + EncodingSize,
+    [(); P::K]:,
+    [(); P::DU]:,
+    [(); P::ENCODED_SIZE]:,
+    [(); P::ENCODED_CT_SIZE]:,
+    [(); P::FIPS_ENCODED_SIZE]:,
+    [(); P::FIPS_ENCODED_USIZE]:,
+    [(); P::FIPS_ENCODED_CT_SIZE]:,
+{
+    fn from(value: [u8; P::ENCODED_CT_SIZE]) -> Self {
+        KCiphertext::decode(&value).unwrap()
+    }
+}
+
+impl<P> TryFrom<&[u8]> for KEncodedCiphertext<P>
+where
+    P: KemCore + EncodingSize,
+    [(); P::K]:,
+    [(); P::DU]:,
+    [(); P::ENCODED_SIZE]:,
+    [(); P::ENCODED_CT_SIZE]:,
+    [(); P::FIPS_ENCODED_SIZE]:,
+{
+    type Error = EncodeError;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        KEncodedCiphertext::try_from_bytes(value)
+    }
+}
+
+impl<P> TryFrom<&[u8]> for KCiphertext<P>
+where
+    P: KemCore + EncodingSize,
+    [(); P::K]:,
+    [(); P::DU]:,
+    [(); P::ENCODED_SIZE]:,
+    [(); P::ENCODED_CT_SIZE]:,
+    [(); P::FIPS_ENCODED_SIZE]:,
+    [(); P::FIPS_ENCODED_USIZE]:,
+    [(); P::FIPS_ENCODED_CT_SIZE]:,
+{
+    type Error = EncodeError;
+    fn try_from(buf: &[u8]) -> Result<Self, EncodeError> {
+        KCiphertext::decode(buf)
     }
 }
 
@@ -246,11 +346,85 @@ where
     }
 }
 
+impl<P> Decapsulate<KCiphertext<P>, SharedKey<P>> for KDecapsulationKey<P>
+where
+    P: KemCore + EncodingSize,
+    [(); P::K]:,
+    [(); P::DU]:,
+    [(); P::ENCODED_SIZE]:,
+    [(); P::ENCODED_CT_SIZE]:,
+    [(); P::FIPS_ENCODED_SIZE]:,
+    [(); P::FIPS_ENCODED_USIZE]:,
+    [(); P::FIPS_ENCODED_CT_SIZE]:,
+{
+    type Error = EncodeError;
+
+    fn decapsulate(&self, ciphertext: &KCiphertext<P>) -> Result<SharedKey<P>, Self::Error> {
+        self.0
+            .decapsulate(&ciphertext.fips)
+            .map_err(|e| EncodeError::DecapsulationError(format!("failed to decapsulate: {e:?}")))
+    }
+}
+
+impl<P> Decapsulate<Ciphertext<P>, SharedKey<P>> for KDecapsulationKey<P>
+where
+    P: KemCore + EncodingSize,
+    [(); P::K]:,
+    [(); P::DU]:,
+    [(); P::ENCODED_SIZE]:,
+    [(); P::ENCODED_CT_SIZE]:,
+    [(); P::FIPS_ENCODED_SIZE]:,
+    [(); P::FIPS_ENCODED_USIZE]:,
+    [(); P::FIPS_ENCODED_CT_SIZE]:,
+{
+    type Error = EncodeError;
+
+    fn decapsulate(&self, ciphertext: &Ciphertext<P>) -> Result<SharedKey<P>, Self::Error> {
+        self.0
+            .decapsulate(&ciphertext)
+            .map_err(|e| EncodeError::DecapsulationError(format!("failed to decapsulate: {e:?}")))
+    }
+}
+
+impl<P: KemCore + EncodingSize + FipsEncodingSize> KDecapsulationKey<P> {
+    pub fn from_fips_bytes(value: impl AsRef<[u8]>) -> Result<Self, EncodeError> {
+        let b = value.as_ref();
+        if b.len() != P::FIPS_ENCODED_SIZE {
+            return Err(EncodeError::ParseError(
+                "incorrect Decapsulation key length".into(),
+            ));
+        }
+
+        let fips_key_encoded =
+            Encoded::<P::DecapsulationKey>::try_from(b).map_err(Into::<EncodeError>::into)?;
+        let fips_key = P::DecapsulationKey::from_bytes(&fips_key_encoded);
+
+        Ok(KDecapsulationKey(fips_key))
+    }
+}
+
+impl<P> EncodedSizeUser for KDecapsulationKey<P>
+where
+    P: KemCore + EncodingSize,
+{
+    type EncodedSize = <<P as KemCore>::DecapsulationKey as EncodedSizeUser>::EncodedSize;
+
+    fn as_bytes(&self) -> Encoded<Self> {
+        self.0.as_bytes()
+    }
+
+    fn from_bytes(enc: &Encoded<Self>) -> Self {
+        let dk = P::DecapsulationKey::from_bytes(enc);
+        Self(dk)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
+    // use crate::{MlKem512, MlKem768, MlKem1024};
 
-    use ml_kem::{Encoded, EncodedSizeUser, KemCore, MlKem1024, MlKem512, MlKem768};
+    use ml_kem::{Encoded, EncodedSizeUser, KemCore, MlKem512, MlKem768, MlKem1024};
 
     fn generate_trial<P>()
     where
