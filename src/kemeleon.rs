@@ -31,11 +31,8 @@ where
     /// Convert object to the serialized byte representation
     fn as_bytes(&self) -> Self::ET;
 
-    /// Try to parse from bytes
-    ///
-    /// # Errors
-    /// - length error: input ciphertext is the wrong size
-    ///
+    /// Try to parse from bytes. Throws an [`EncodeError::ParseError`] if the
+    /// provided value cannot be parsed for any reason.
     fn try_from_bytes(c: impl AsRef<[u8]>) -> Result<Self, Self::Error>;
 }
 

@@ -20,7 +20,7 @@ Encapsulation Keys their corresponding Ciphertext responses which would otherwis
 be trivially distinguishable from bytes sampled from a uniform random source.
 
 The original algorithm designs and security proofs can be found in the
-["_Obfuscated Key Exchange_"](https://eprint.iacr.org/2024/1086.pdf)
+[_Obfuscated Key Exchange_](https://eprint.iacr.org/2024/1086.pdf)
 paper written by _Felix Günther_ (IBM Research Europe – Zurich), _Douglas Stebila_ (University of Waterloo), _Shannon Veitch_ (ETH Zurich).
 
 ## ⚠️ Security Warning
@@ -97,9 +97,9 @@ Cleanup
 - [ ] Modify implementation to be `no-std` compatible
 - [ ] Move const generics (`#![feature(generics_const_exprs)]`) to its own branch
   - const generics are an unstable feature, even though this is a very simple
-application of the feature it is bad practice to ask people use it in its current state.
+    application of the feature it is bad practice to ask people use it in its current state.
 - [ ] Use [`generic_array`](https://docs.rs/generic-array/latest/generic_array/) for
-all type based generics requiring sized arrays
+  all type based generics requiring sized arrays
 - [ ] Polish interface and docs for first release
 - [ ] Github actions release workflow
 

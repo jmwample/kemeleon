@@ -5,6 +5,7 @@
 #![allow(clippy::cast_possible_truncation)]
 // do not warn about downcasting
 #![deny(missing_docs)] // Require all public interfaces to be documented
+#![allow(clippy::missing_errors_doc)] // adding Errors section is more than I want to do
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 #![doc = include_str!("../README.md")]

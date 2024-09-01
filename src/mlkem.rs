@@ -95,7 +95,7 @@ where
     /// FIPS representation, while `from_bytes` parses only from the Kemeleon representation.
     pub fn from_fips_bytes(ek_fb: impl AsRef<[u8]>, mask_byte: u8) -> Self {
         let ek_fb_e = Encoded::<<P as KemCore>::EncapsulationKey>::try_from(ek_fb.as_ref())
-            .map_err(|e| EncodeError::MlKemError(e))
+            .map_err(EncodeError::MlKemError)
             .unwrap();
         let key = <P as KemCore>::EncapsulationKey::from_bytes(&ek_fb_e);
         Self {
@@ -132,7 +132,7 @@ where
 
             return Ok((KEncodedCiphertext(ct.bytes), ss));
         }
-        return Err(EncodeError::NotEncodable);
+        Err(EncodeError::NotEncodable)
     }
 }
 
@@ -260,7 +260,7 @@ where
     [(); P::FIPS_ENCODED_CT_SIZE]:,
 {
     fn from(value: [u8; P::ENCODED_CT_SIZE]) -> Self {
-        KCiphertext::decode(&value).unwrap()
+        KCiphertext::decode(value).unwrap()
     }
 }
 
@@ -364,7 +364,7 @@ where
 
     fn decapsulate(&self, ciphertext: &Ciphertext<P>) -> Result<SharedKey<P>, Self::Error> {
         self.0
-            .decapsulate(&ciphertext)
+            .decapsulate(ciphertext)
             .map_err(|e| EncodeError::DecapsulationError(format!("failed to decapsulate: {e:?}")))
     }
 }

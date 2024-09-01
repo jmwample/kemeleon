@@ -145,8 +145,8 @@ where
 
         // ml_kem::Ciphertext = c1 || c2
         fips_ct[P::FIPS_ENCODED_USIZE..].copy_from_slice(c2);
-        let fips = ml_kem::Ciphertext::<P>::try_from(&fips_ct[..])
-            .map_err(|e| EncodeError::MlKemError(e))?;
+        let fips =
+            ml_kem::Ciphertext::<P>::try_from(&fips_ct[..]).map_err(EncodeError::MlKemError)?;
 
         Ok(Self {
             encoded: true,
@@ -165,6 +165,7 @@ fn recover_rand<const DU: usize>(i: u16, rng: &mut impl CryptoRngCore) -> u16 {
         .expect("no equivalence found, should be impossible")
 }
 
+#[allow(clippy::integer_division_remainder_used)]
 fn rejection_sample<R: CryptoRng + RngCore>(c2: &[u8], rng: &mut R, dv: usize) -> bool {
     let mut result = true;
     let lim = 2_u32.pow(dv as u32);
