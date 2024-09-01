@@ -5,7 +5,6 @@ use core::fmt::Debug;
 use std::marker::PhantomData;
 
 use kem::{Decapsulate, Encapsulate};
-use hybrid_array::typenum::U32;
 use ml_kem::{Ciphertext, Encoded, EncodedSizeUser, KemCore, SharedKey};
 #[cfg(feature = "deterministic")]
 use ml_kem::{EncapsulateDeterministic, B32};
@@ -34,7 +33,7 @@ where
     [(); <P as EncodingSize>::K]:,
     [(); P::USIZE]:,
 {
-    pub fn generate_priv(rng: &mut impl CryptoRngCore) -> (KDecapsulationKey<P>, KEncapsulationKey<P>) {
+    pub fn generate(rng: &mut impl CryptoRngCore) -> (KDecapsulationKey<P>, KEncapsulationKey<P>) {
         // random u8 for the most significant byte which will be less than 8 bits.
         let msb_rand = rng.next_u32() as u8;
 
@@ -52,31 +51,6 @@ where
             continue;
         }
         panic!("failed to generate key - you have a bad random number generator")
-    }
-}
-
-impl<P> KemCore for Kemx<P>
-where
-    P: ml_kem::KemCore + EncodingSize,
-    [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
-    [(); <P as EncodingSize>::ENCODED_SIZE]:,
-    [(); <P as EncodingSize>::K]:,
-    [(); P::USIZE]:,
-{
-    type SharedKeySize = P::SharedKeySize;
-    type CiphertextSize = P::CiphertextSize;
-    type DecapsulationKey = KDecapsulationKey<P>;
-    type EncapsulationKey = KEncapsulationKey<P>;
-
-    fn generate(rng: &mut impl CryptoRngCore) -> (Self::DecapsulationKey, Self::EncapsulationKey) {
-        Self::generate_priv(rng)
-    }
-
-    #[cfg(feature="deterministic")]
-    fn generate_deterministic(d: &B32, z: &B32)
-            -> (Self::DecapsulationKey, Self::EncapsulationKey) {
-        let (dk, ek) = P::generate_deterministic(d, z);
-        (KDecapsulationKey(dk), KEncapsulationKey::<P>{key: ek, byte: 0x00_u8})
     }
 }
 
@@ -139,17 +113,19 @@ where
         &self,
         rng: &mut impl CryptoRngCore,
     ) -> Result<(KEncodedCiphertext<P>, SharedKey<P>), Self::Error> {
-        let (ek, ss) = self
-            .key
-            .encapsulate(rng)
-            .map_err(|_| EncodeError::EncapsulationError("ML-KEM encapsulation error".into()))?;
-        let (success, ct) = KCiphertext::<P>::new(&ek, &ss)?;
+        for _ in 0..MAX_RETRIES {
+            let (ek, ss) = self.key.encapsulate(rng).map_err(|_| {
+                EncodeError::EncapsulationError("ML-KEM encapsulation error".into())
+            })?;
+            let (success, ct) = KCiphertext::<P>::new(&ek, &ss)?;
 
-        if !success {
-            return Err(EncodeError::NotEncodable);
+            if !success {
+                continue;
+            }
+
+            return Ok((KEncodedCiphertext(ct.bytes), ss));
         }
-
-        return Ok((KEncodedCiphertext(ct.bytes), ss));
+        return Err(EncodeError::NotEncodable);
     }
 }
 
@@ -214,13 +190,13 @@ where
 //     P: KemCore + EncodingSize,
 // {
 //     type EncodedSize = typenum::U749;
-// 
+//
 //     fn as_bytes(&self) -> Encoded<Self> {
-//         
+//
 //     }
-// 
+//
 //     fn from_bytes(enc: &Encoded<Self>) -> Self {
-//         
+//
 //     }
 // }
 
@@ -422,9 +398,8 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    // use crate::{MlKem512, MlKem768, MlKem1024};
 
-    use ml_kem::{Encoded, EncodedSizeUser, KemCore, MlKem512, MlKem768, MlKem1024};
+    use ml_kem::{Encoded, EncodedSizeUser, KemCore, MlKem1024, MlKem512, MlKem768};
 
     fn generate_trial<P>()
     where

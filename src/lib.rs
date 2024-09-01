@@ -183,7 +183,7 @@ pub type MlKem1024 = mlkem::Kemx<ml_kem::MlKem1024>;
 
 impl<P> EncodingSize for mlkem::Kemx<P>
 where
-    P: ml_kem::KemCore + EncodingSize
+    P: ml_kem::KemCore + EncodingSize,
 {
     const K: usize = P::K;
     const DU: usize = P::DU;
@@ -192,4 +192,3 @@ where
     const T_HAT_LEN: usize = P::T_HAT_LEN;
     const MSB_BITMASK: u8 = P::MSB_BITMASK;
 }
-
