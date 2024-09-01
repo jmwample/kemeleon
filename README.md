@@ -85,14 +85,15 @@ Core features
 - [x] Interface with [`ml_kem`](https://docs.rs/ml-kem/latest)
 - [x] Implement complete Encapsulation Key encoding / decoding
 - [x] Implement and test ciphertext encoding / decoding
-- [ ] Nist vectors Integration tests
+- [x] Pass on public docs
+- [x] Switch from using [`std::io::Error`] to a locally defined error type.
 - [ ] Ciphertext encoding determinism using hkdf, hmac-drbg, or something similar
-- [ ] Switch from using [`std::io::Error`] to a locally defined error type.
-- [ ] Pass on public docs
+- [ ] Nist vectors Integration tests
 
 Cleanup
 
-- [ ] GH actions for testing, building, linting, etc.
+- [x] GH actions for testing, building, linting, etc.
+  - [] tests/builds for stable releases (const generics only work on nightly)
 - [ ] Modify implementation to be `no-std` compatible
 - [ ] Move const generics (`#![feature(generics_const_exprs)]`) to its own branch
   - const generics are an unstable feature, even though this is a very simple

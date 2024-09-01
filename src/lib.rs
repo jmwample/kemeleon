@@ -4,7 +4,7 @@
 #![warn(clippy::integer_division_remainder_used)] // Be judicious about using `/` and `%`
 #![allow(clippy::cast_possible_truncation)]
 // do not warn about downcasting
-// #![deny(missing_docs)] // Require all public interfaces to be documented
+#![deny(missing_docs)] // Require all public interfaces to be documented
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 #![doc = include_str!("../README.md")]
@@ -64,12 +64,16 @@ impl FieldElement {
 
 /// Convert between Kemeleon and [`ml_kem`](https://docs.rs/ml-kem/latest/ml_kem/) values.
 pub trait Transcode {
+    /// Fips equivalent type
     type Fips;
 
+    /// convert to a reference to the fips equivalent object.
     fn as_fips(&self) -> &Self::Fips;
 
+    /// consume and convert to the fips equivalent object.
     fn to_fips(self) -> Self::Fips;
 
+    /// create a new object from the fips equivalent.
     fn from_fips(t: Self::Fips) -> Self;
 }
 
@@ -91,9 +95,6 @@ pub trait Transcode {
 pub trait EncodingSize {
     /// Number of bits used to represent field elements
     const USIZE: usize = 12_usize;
-
-    const VALUE_STEP: usize = 2_usize;
-    const BYTE_STEP: usize = 3_usize;
 
     /// Number of field elements per equation.
     const K: usize;
@@ -131,12 +132,18 @@ pub trait EncodingSize {
     const ENCODED_CT_SIZE: usize = Self::ENCODED_USIZE + Self::ENCODED_VSIZE;
 }
 
+/// Fips encoding size values
 pub trait FipsEncodingSize: EncodingSize {
+    /// Length of an NTT Vector encoded and compressed
     const FIPS_T_HAT_LEN: usize = Self::K * 12 * 32;
+    /// Length of an encoded FIPS encapsulation key
     const FIPS_ENCODED_SIZE: usize = Self::FIPS_T_HAT_LEN + RHO_LEN;
 
+    /// Size of the compressed U element of an ML-KEM ciphertext.
     const FIPS_ENCODED_USIZE: usize = 32 * Self::DU * Self::K;
+    /// Size of the compressed V element of an ML-KEM ciphertext.
     const FIPS_ENCODED_VSIZE: usize = 32 * Self::DV;
+    /// Size of a ciphertext encoded and compressed using FIPS standard.
     const FIPS_ENCODED_CT_SIZE: usize = Self::FIPS_ENCODED_USIZE + Self::FIPS_ENCODED_VSIZE;
 }
 impl<T: EncodingSize> FipsEncodingSize for T {}

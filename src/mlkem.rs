@@ -80,12 +80,19 @@ where
 {
     // TODO: must use for now -- not sure it this will stay
     #[must_use]
+    /// Construct a local object representing an Encapsulation key from the FIPS byte
+    /// representations of the individual parts of the key.
     pub fn from_parts(t_hat: &[[u16; ARR_LEN]; P::K], rho: &[u8; 32], mask_byte: u8) -> Self {
         let ek_fb = fips::ek_encode(rho, t_hat);
         Self::from_fips_bytes(ek_fb, mask_byte)
     }
 
     // TODO: should this be a Result since a key of improper length could panic?
+    /// Provides an interface for creating a Kemeleon version of an object from the
+    /// FIPS byte encoded version.
+    ///
+    /// Differs from `EncapsulationKey::<P>::from_bytes()` in that this parses only from
+    /// FIPS representation, while `from_bytes` parses only from the Kemeleon representation.
     pub fn from_fips_bytes(ek_fb: impl AsRef<[u8]>, mask_byte: u8) -> Self {
         let ek_fb_e = Encoded::<<P as KemCore>::EncapsulationKey>::try_from(ek_fb.as_ref())
             .map_err(|e| EncodeError::MlKemError(e))
@@ -363,6 +370,8 @@ where
 }
 
 impl<P: KemCore + EncodingSize + FipsEncodingSize> KDecapsulationKey<P> {
+    /// Provides an interface for creating a Kemeleon version of a decapsulation key from
+    /// the FIPS byte encoded version.
     pub fn from_fips_bytes(value: impl AsRef<[u8]>) -> Result<Self, EncodeError> {
         let b = value.as_ref();
         if b.len() != P::FIPS_ENCODED_SIZE {

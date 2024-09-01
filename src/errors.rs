@@ -1,5 +1,6 @@
 use core::array::TryFromSliceError;
 
+/// Errors encountered while using the Kemeleon encoding strategy.
 #[derive(Debug)]
 pub enum EncodeError {
     /// Indicates that an ['EncapsulationKey'] or ['Ciphertext'] failed sampling check.

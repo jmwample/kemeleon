@@ -1,8 +1,11 @@
+/// An ML-KEM ciphertext
 pub use crate::mlkem::KCiphertext as Ciphertext;
+/// A `DecapsulationKey` provides the ability to generate a new key pair, and decapsulate
+/// an encapsulated shared key.
 pub use crate::mlkem::KDecapsulationKey as DecapsulationKey;
-/// Key used for encapsulation
+/// An `EncapsulationKey` provides the ability to encapsulate a shared key so that it can
+/// only be decapsulated by the holder of the corresponding decapsulation key.
 pub use crate::mlkem::KEncapsulationKey as EncapsulationKey;
-// pub use crate::mlkem::KEncodedCiphertext as EncodedCiphertext;
 use crate::{EncodeError, EncodingSize, FieldElement, FipsEncodingSize};
 
 use core::cmp::min;
@@ -13,6 +16,8 @@ use num_bigint::BigUint;
 mod ciphertext;
 mod encapsulation_key;
 
+// TODO: is this used / useful?
+/// Generic trait for Encodable objects
 pub trait Encode
 where
     Self: Sized,
@@ -23,6 +28,7 @@ where
     /// Error Type returned on failed decode
     type Error;
 
+    /// Convert object to the serialized byte representation
     fn as_bytes(&self) -> Self::ET;
 
     /// Try to parse from bytes
@@ -33,7 +39,10 @@ where
     fn try_from_bytes(c: impl AsRef<[u8]>) -> Result<Self, Self::Error>;
 }
 
+/// Trait indicating that an object could fail sampling, and testing whether that
+/// object passes or fails that sampling.
 pub trait Encodable: Encode {
+    /// Checks if the objcet is encodable given the Kemeleon sampling criteria
     fn satisfies_sampling(&self) -> bool;
 }
 
