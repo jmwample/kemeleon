@@ -93,7 +93,7 @@ Core features
 Cleanup
 
 - [x] GH actions for testing, building, linting, etc.
-  - [] tests/builds for stable releases (const generics only work on nightly)
+  - [ ] tests/builds for stable releases (const generics only work on nightly)
 - [ ] Modify implementation to be `no-std` compatible
 - [ ] Move const generics (`#![feature(generics_const_exprs)]`) to its own branch
   - const generics are an unstable feature, even though this is a very simple

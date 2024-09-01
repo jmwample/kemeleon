@@ -33,28 +33,24 @@ jobs:
     - name: run udeps
       run: cargo +nightly udeps --all-features --all-targets
 
- #   lint:
- #     name: Lint with clippy
- #     needs: format
- #     strategy:
- #       fail-fast: true
- #     runs-on: "ubuntu-latest"
- #     env:
- #       RUSTFLAGS: -Dwarnings
-
- #     steps:
- #     - uses: actions/checkout@v4
-
- #     - name: Install Rust
- #       uses: dtolnay/rust-toolchain@nightly
- #       with:
- #         components: clippy, rustfmt
-
- #     - name: Install clippy
- #       run: rustup component add clippy --toolchain nightly
-
- #     - name: Lint
- #       run: cargo clippy --workspace --all-targets --verbose --all-features
+  lint:
+    name: Lint with clippy
+    needs: format
+    strategy:
+      fail-fast: true
+    runs-on: "ubuntu-latest"
+    env:
+      RUSTFLAGS: -Dwarnings
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@nightly
+      with:
+        components: clippy, rustfmt
+    - name: Install clippy
+      run: rustup component add clippy --toolchain nightly
+    - name: Lint
+      run: cargo clippy --workspace --all-targets --verbose --all-features
 
 #     bench:
 #       name: Check that benchmarks compile
@@ -134,9 +130,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@nightly
+    - uses: dtolnay/rust-toolchain@nightly
 
     # Build kemeleon library
     - name: Build library and bins

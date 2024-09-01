@@ -93,7 +93,11 @@ where
     ///
     /// Differs from `EncapsulationKey::<P>::from_bytes()` in that this parses only from
     /// FIPS representation, while `from_bytes` parses only from the Kemeleon representation.
-    pub fn from_fips_bytes(ek_fb: impl AsRef<[u8]>, mask_byte: u8) -> Self {
+    ///
+    /// Panics if the provided FIPS encapsulation key is not the proper size. this
+    /// is only used internally so this should never be provided an improperly
+    /// formatted encapsulation key.
+    fn from_fips_bytes(ek_fb: impl AsRef<[u8]>, mask_byte: u8) -> Self {
         let ek_fb_e = Encoded::<<P as KemCore>::EncapsulationKey>::try_from(ek_fb.as_ref())
             .map_err(EncodeError::MlKemError)
             .unwrap();

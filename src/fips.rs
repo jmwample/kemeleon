@@ -13,6 +13,35 @@
 
 use crate::{Barr8, EncodingSize, FieldElement, FipsEncodingSize, NttArray, ARR_LEN, RHO_LEN};
 
+/// This is a helper function for computing a conversion of number of values to
+/// number of bytes when encoding values using `d` bits each.
+///
+/// Returns a tuple indicating 1) number of values and 2) number of bytes
+#[allow(clippy::integer_division_remainder_used)]
+fn get_relative_steps(d: usize) -> (usize, usize) {
+    match d {
+        12 => (2, 3),
+        5 => (8, 5),
+        4 => (2, 1),
+        _ => {
+            let y = (d * 8) / gcd(d, 8);
+            (y / d, y / 8)
+        }
+    }
+}
+
+#[allow(clippy::integer_division_remainder_used)]
+fn gcd(x: usize, y: usize) -> usize {
+    let mut x = x;
+    let mut y = y;
+    while y != 0 {
+        let t = y;
+        y = x % y;
+        x = t;
+    }
+    x
+}
+
 // Algorithm 4 ByteEncode_d(F)
 //
 // Note: This algorithm performs compression as well as encoding.
@@ -23,7 +52,7 @@ pub(crate) fn byte_encode<D, const USIZE: usize>(
     D: EncodingSize,
 {
     let bytes = dst.as_mut();
-    let idx = USIZE * D::K * 256 / 8;
+    let idx = USIZE * D::K * 32; // (32 = 256 / 8)
 
     // TODO should I remove this length check or convert it to a result?
     assert_eq!(
@@ -34,9 +63,7 @@ pub(crate) fn byte_encode<D, const USIZE: usize>(
         D::K
     );
 
-    let y = (USIZE * 8) / gcd(USIZE, 8);
-    let val_step = y / USIZE;
-    let byte_step = y / 8;
+    let (val_step, byte_step) = get_relative_steps(USIZE);
 
     let vc = ntt_vals.as_flattened().chunks(val_step);
     let bc = bytes[..idx].chunks_mut(byte_step);
@@ -51,26 +78,13 @@ pub(crate) fn byte_encode<D, const USIZE: usize>(
     }
 }
 
-fn gcd(x: usize, y: usize) -> usize {
-    let mut x = x;
-    let mut y = y;
-    while y != 0 {
-        let t = y;
-        y = x % y;
-        x = t;
-    }
-    x
-}
-
 // Algorithm 5 ByteDecode_d(F)
 //
 // Note: This function performs decompression as well as decoding.
 pub(crate) fn byte_decode<D: EncodingSize, const USIZE: usize>(
     bytes: impl AsRef<[u8]>,
 ) -> NttArray<{ D::K }> {
-    let y = (USIZE * 8) / gcd(USIZE, 8);
-    let val_step = y / USIZE;
-    let byte_step = y / 8;
+    let (val_step, byte_step) = get_relative_steps(USIZE);
     let mask = (1 << USIZE) - 1;
 
     let mut vals = [[0u16; ARR_LEN]; D::K];
