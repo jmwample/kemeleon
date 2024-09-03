@@ -4,108 +4,21 @@
 #![warn(clippy::integer_division_remainder_used)] // Be judicious about using `/` and `%`
 #![allow(clippy::cast_possible_truncation)]
 // do not warn about downcasting
-// #![deny(missing_docs)] // Require all public interfaces to be documented
-
-//! # Kemeleon: Obfuscated ML-KEM Encodings
-//!
-//! [Paper](https://eprint.iacr.org/2024/1086.pdf).
-//!
-//! ## ⚠️ Security Warning
-//!
-//! The implementation contained in this crate has never been independently audited!
-//!
-//! **USE AT YOUR OWN RISK!**
-//!
-//! ## Usage
-//!
-//! ```rust ignore
-//! use kemeleon::MlKem512;
-//! use kem::{Encapsulate, Decapsulate};
-//!
-//! let mut rng = rand::thread_rng();
-//! let (dk, ek) = MlKem512::generate(&mut rng);
-//!
-//! // // Converting the Encapsulation key to bytes and back in order to be sent.
-//! // let ek_encoded: Vec<u8> = ek.as_bytes().to_vec();
-//!
-//! let (ct, k_send) = ek.encapsulate(&mut rng).unwrap();
-//!
-//! // // Converting the ciphertext to bytes and back in order to be sent.
-//! // let ct = Ciphertext::<MlKem512>::from_bytes(ct);
-//!
-//! let k_recv = dk.decapsulate(&ct).unwrap();
-//! assert_eq!(k_send, k_recv);
-//! ```
-//!
-//! ## Explanation
-//!
-//! #### Encapsulation Keys
-//!
-//! $$
-//! Kemeleon.VectorEncode(a):
-//! $$
-//!
-//! ```txt ignore
-//! Kemeleon.Encode(a):
-//!   1 𝑟 ← sum(𝑖=1, 𝑘·𝑛, 𝑞^(𝑖−1) · a[𝑖]
-//!   2 if 𝑟 .bit( ⌈log2 (𝑞^(𝑛·𝑘) + 1) ⌉) = 1:
-//!   3     return ⊥                        // if the most significant bit is 1 -> reject
-//!   4 return 𝑟 .bit(0 : ⌈log2 (𝑞^(𝑛·𝑘) + 1) ⌉ − 1)
-//! ```
-//!
-//! Once encoded in this way the high order byte will have the remainder randomized
-//!
-//! A key encoded in this way can then be decoded using the following algorithm
-//!
-//! ```txt ignore
-//! Kemeleon.Decode(𝑟):
-//!   1 𝑟 .bit( ⌈log2(𝑞^(𝑛·𝑘 + 1) ⌉) ← 0    // set most significant bit to 0
-//!   2 for 𝑖 = 1 to 𝑘 · 𝑛:
-//!   3     a[𝑖] ← ( 𝑟− sum(𝑗=1, 𝑖−1, 𝑝𝑘 [𝑗]) ) / ( 𝑞^(𝑖−1) ) mod 𝑞
-//!   4 return a
-//! ```
-//!
-//! #### Ciphertext
-//!
-// $$
-// EncodeCiphertext(c = (c1 || c2)): \\
-//
-// for i in
-//
-// $$
-//
-// = \[0 .. k*n\]: \\\
-//     x \xleftarrow $ \{ a: Decomp(Comp(u\[i\] + a, d_u), d_u)=u\[i\] \}
-// \begin{aligned}
-// \end{aligned}
-//!
-//! ```txt ignore
-//! Kemeleon.DecodeCtxt(r):
-//!
-//! ```
-//!
-//! ## Minimum Supported Rust Version (MSRV)
-//!
-//! The Minimum Supported Rust Versions (MSRV) for this crate is **Rust 1.74**
-//! forced by the [`ml-kem`] dependency. This minumum version will be ensured by
-//! the test and build steps in the CI pipeline.
-//!
-//! Going forward, the MSRV can be changed at any time, but it will be done with
-//! a minor version bump. We will not increase MSRV on PATCH releases, though
-//! downstream dependencies might.
-//!
-//! We won't increase MSRV just because we can: we'll only do so when we have a
-//! reason. (We don't guarantee that you'll agree with our reasoning; only that
-//! it will exist.)
-//!
+#![deny(missing_docs)] // Require all public interfaces to be documented
+#![allow(clippy::missing_errors_doc)] // adding Errors section is more than I want to do
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
+#![doc = include_str!("../README.md")]
 
 use core::fmt::Debug;
 
+mod errors;
 mod fips;
-pub mod kemeleon;
+mod kemeleon;
 mod mlkem;
+
+pub use errors::*;
+pub use kemeleon::*;
 
 #[derive(Copy, Clone, Default, PartialEq, PartialOrd)]
 pub(crate) struct FieldElement(pub u16);
@@ -150,14 +63,18 @@ impl FieldElement {
     pub const Q64: u64 = Self::Q as u64;
 }
 
-/// Convert between Kemeleon and `ml-kem` values.
+/// Convert between Kemeleon and [`ml_kem`](https://docs.rs/ml-kem/latest/ml_kem/) values.
 pub trait Transcode {
+    /// Fips equivalent type
     type Fips;
 
+    /// convert to a reference to the fips equivalent object.
     fn as_fips(&self) -> &Self::Fips;
 
+    /// consume and convert to the fips equivalent object.
     fn to_fips(self) -> Self::Fips;
 
+    /// create a new object from the fips equivalent.
     fn from_fips(t: Self::Fips) -> Self;
 }
 
@@ -179,9 +96,6 @@ pub trait Transcode {
 pub trait EncodingSize {
     /// Number of bits used to represent field elements
     const USIZE: usize = 12_usize;
-
-    const VALUE_STEP: usize = 2_usize;
-    const BYTE_STEP: usize = 3_usize;
 
     /// Number of field elements per equation.
     const K: usize;
@@ -219,12 +133,18 @@ pub trait EncodingSize {
     const ENCODED_CT_SIZE: usize = Self::ENCODED_USIZE + Self::ENCODED_VSIZE;
 }
 
-trait FipsEncodingSize: EncodingSize {
+/// Fips encoding size values
+pub trait FipsEncodingSize: EncodingSize {
+    /// Length of an NTT Vector encoded and compressed
     const FIPS_T_HAT_LEN: usize = Self::K * 12 * 32;
+    /// Length of an encoded FIPS encapsulation key
     const FIPS_ENCODED_SIZE: usize = Self::FIPS_T_HAT_LEN + RHO_LEN;
 
+    /// Size of the compressed U element of an ML-KEM ciphertext.
     const FIPS_ENCODED_USIZE: usize = 32 * Self::DU * Self::K;
+    /// Size of the compressed V element of an ML-KEM ciphertext.
     const FIPS_ENCODED_VSIZE: usize = 32 * Self::DV;
+    /// Size of a ciphertext encoded and compressed using FIPS standard.
     const FIPS_ENCODED_CT_SIZE: usize = Self::FIPS_ENCODED_USIZE + Self::FIPS_ENCODED_VSIZE;
 }
 impl<T: EncodingSize> FipsEncodingSize for T {}
@@ -268,3 +188,15 @@ pub type MlKem768 = mlkem::Kemx<ml_kem::MlKem768>;
 
 /// ML-KEM with the parameter set for security category 5, corresponding to key search on a block cipher with a 256-bit key.
 pub type MlKem1024 = mlkem::Kemx<ml_kem::MlKem1024>;
+
+impl<P> EncodingSize for mlkem::Kemx<P>
+where
+    P: ml_kem::KemCore + EncodingSize,
+{
+    const K: usize = P::K;
+    const DU: usize = P::DU;
+    const DV: usize = P::DV;
+
+    const T_HAT_LEN: usize = P::T_HAT_LEN;
+    const MSB_BITMASK: u8 = P::MSB_BITMASK;
+}

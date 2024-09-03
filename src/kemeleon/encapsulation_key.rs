@@ -1,7 +1,5 @@
 use super::{vector_decode, vector_encode, EncapsulationKey, Encodable, Encode};
-use crate::{fips, Barr8, EncodingSize, FipsEncodingSize, ARR_LEN, RHO_LEN};
-
-use std::io::Error as IoError;
+use crate::{fips, Barr8, EncodeError, EncodingSize, FipsEncodingSize, ARR_LEN, RHO_LEN};
 
 use ml_kem::{EncodedSizeUser, KemCore};
 
@@ -18,7 +16,7 @@ where
     [(); P::USIZE]:,
 {
     type ET = Barr8<{ <P as EncodingSize>::ENCODED_SIZE }>;
-    type Error = IoError;
+    type Error = EncodeError;
 
     /// In this formulation a is 1 indexed (as oposed to being 0 indexed)
     ///
@@ -63,7 +61,7 @@ where
     [(); <P as EncodingSize>::K]:,
     [(); P::USIZE]:,
 {
-    fn satisfies_sampling(&self) -> bool {
+    fn is_encodable(&self) -> bool {
         let mut dst = [0u8; <P as EncodingSize>::ENCODED_SIZE];
         self.encode_priv(&mut dst).expect("should never fail")
     }
@@ -77,9 +75,9 @@ where
     [(); <P as EncodingSize>::K]:,
     [(); P::USIZE]:,
 {
-    fn decode_priv(c: impl AsRef<[u8]>) -> Result<Self, IoError> {
+    fn decode_priv(c: impl AsRef<[u8]>) -> Result<Self, EncodeError> {
         if c.as_ref().len() < P::ENCODED_SIZE {
-            return Err(IoError::other("incorrect length"));
+            return Err(EncodeError::ParseError("incorrect length".into()));
         }
 
         // Get the random mask byte from the high order bits
@@ -102,10 +100,10 @@ where
         Ok(EncapsulationKey::<P>::from_parts(&vals, &rho, rand_byte))
     }
 
-    fn encode_priv(&self, mut dst: impl AsMut<[u8]>) -> Result<bool, IoError> {
+    fn encode_priv(&self, mut dst: impl AsMut<[u8]>) -> Result<bool, EncodeError> {
         let k = dst.as_mut();
         if k.len() < P::ENCODED_SIZE {
-            return Err(IoError::other(format!(
+            return Err(EncodeError::EncodeError(format!(
                 "invalid dst array size. {} < {}",
                 k.len(),
                 P::ENCODED_SIZE,
@@ -268,7 +266,7 @@ mod tests {
             key: P::EncapsulationKey::from_bytes(&encoded),
             byte: 0x00,
         };
-        if key.satisfies_sampling() {
+        if key.is_encodable() {
             let kv = BigUint::from_bytes_le(&key.as_bytes()[..P::T_HAT_LEN]);
             assert_eq!(&kv, v, "{description}");
         }
