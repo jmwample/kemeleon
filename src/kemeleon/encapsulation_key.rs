@@ -61,7 +61,7 @@ where
     [(); <P as EncodingSize>::K]:,
     [(); P::USIZE]:,
 {
-    fn satisfies_sampling(&self) -> bool {
+    fn is_encodable(&self) -> bool {
         let mut dst = [0u8; <P as EncodingSize>::ENCODED_SIZE];
         self.encode_priv(&mut dst).expect("should never fail")
     }
@@ -266,7 +266,7 @@ mod tests {
             key: P::EncapsulationKey::from_bytes(&encoded),
             byte: 0x00,
         };
-        if key.satisfies_sampling() {
+        if key.is_encodable() {
             let kv = BigUint::from_bytes_le(&key.as_bytes()[..P::T_HAT_LEN]);
             assert_eq!(&kv, v, "{description}");
         }

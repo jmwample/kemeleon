@@ -43,7 +43,7 @@ where
                 key: ek,
                 byte: msb_rand,
             };
-            if encap_key.satisfies_sampling() {
+            if encap_key.is_encodable() {
                 let decap_key = KDecapsulationKey::<P>(dk);
                 return (decap_key, encap_key);
             }
@@ -136,7 +136,7 @@ where
 
             return Ok((KEncodedCiphertext(ct.bytes), ss));
         }
-        Err(EncodeError::NotEncodable)
+        Err(EncodeError::BadRngSource)
     }
 }
 
@@ -160,13 +160,9 @@ where
             .key
             .encapsulate_deterministic(m)
             .map_err(|_| EncodeError::EncapsulationError("failed encapsulation".into()))?;
-        let (success, ct) = KCiphertext::<P>::new(&ek, &ss)?;
+        let (_, ct) = KCiphertext::<P>::new(&ek, &ss)?;
 
-        if !success {
-            return Err(EncodeError::NotEncodable);
-        }
-
-        return Ok((KEncodedCiphertext(ct.bytes), ss));
+        Ok((KEncodedCiphertext(ct.bytes), ss))
     }
 }
 
@@ -191,21 +187,6 @@ where
         }
     }
 }
-
-// impl<P> EncodedSizeUser for KEncapsulationKey<P>
-// where
-//     P: KemCore + EncodingSize,
-// {
-//     type EncodedSize = typenum::U749;
-//
-//     fn as_bytes(&self) -> Encoded<Self> {
-//
-//     }
-//
-//     fn from_bytes(enc: &Encoded<Self>) -> Self {
-//
-//     }
-// }
 
 // ========================================================================== //
 // Ciphertext encoding
@@ -374,12 +355,6 @@ impl<P: KemCore + EncodingSize + FipsEncodingSize> KDecapsulationKey<P> {
     /// the FIPS byte encoded version.
     pub fn from_fips_bytes(value: impl AsRef<[u8]>) -> Result<Self, EncodeError> {
         let b = value.as_ref();
-        if b.len() != P::FIPS_ENCODED_SIZE {
-            return Err(EncodeError::ParseError(
-                "incorrect Decapsulation key length".into(),
-            ));
-        }
-
         let fips_key_encoded =
             Encoded::<P::DecapsulationKey>::try_from(b).map_err(Into::<EncodeError>::into)?;
         let fips_key = P::DecapsulationKey::from_bytes(&fips_key_encoded);

@@ -6,8 +6,10 @@ use core::array::TryFromSliceError;
 /// Errors encountered while using the Kemeleon encoding strategy.
 #[derive(Debug)]
 pub enum EncodeError {
-    /// Indicates that an [`EncapsulationKey`] or [`Ciphertext`] failed sampling check.
-    NotEncodable,
+    /// A function that always returns an encodable object failed to find
+    /// an encodable option. This can only happen if the provided rng is an
+    /// insufficient source of randomness.
+    BadRngSource,
     /// One or more of the provided items failed to deserialized based on a formatting issue.
     ParseError(String),
     /// Failure while encoding an [`EncapsulationKey`] or [`Ciphertext`] using a kemeleon
@@ -30,7 +32,7 @@ impl std::fmt::Display for EncodeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             // TODO: make error printing better
-            EncodeError::NotEncodable => write!(f, "object is not encodable - i.e. fails sampling"),
+            EncodeError::ParseError(e) => write!(f, "failed to parse: {e}"),
             _ => write!(f, "error occured"),
         }
     }

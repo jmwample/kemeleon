@@ -40,7 +40,7 @@ where
 /// object passes or fails that sampling.
 pub trait Encodable: Encode {
     /// Checks if the objcet is encodable given the Kemeleon sampling criteria
-    fn satisfies_sampling(&self) -> bool;
+    fn is_encodable(&self) -> bool;
 }
 
 pub(crate) fn vector_encode<P>(
