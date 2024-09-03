@@ -152,25 +152,21 @@ where
 {
     type Error = EncodeError;
 
-    // Required method
     fn encapsulate_deterministic(
         &self,
         m: &B32,
     ) -> Result<(KEncodedCiphertext<P>, SharedKey<P>), Self::Error> {
-        for _ in 0..MAX_RETRIES {
-            let (ek, ss) = self
-                .key
-                .encapsulate_deterministic(m)
-                .map_err(|_| EncodeError::EncapsulationError("failed encapsulation".into()))?;
-            let (success, ct) = KCiphertext::<P>::new(&ek, &ss)?;
+        let (ek, ss) = self
+            .key
+            .encapsulate_deterministic(m)
+            .map_err(|_| EncodeError::EncapsulationError("failed encapsulation".into()))?;
+        let (success, ct) = KCiphertext::<P>::new(&ek, &ss)?;
 
-            if !success {
-                continue;
-            }
-
-            return Ok((KEncodedCiphertext(ct.bytes), ss));
+        if !success {
+            return Err(EncodeError::NotEncodable);
         }
-        panic!("failed to generate shared secret and encapsulate - you have a bad random number generator")
+
+        return Ok((KEncodedCiphertext(ct.bytes), ss));
     }
 }
 
@@ -450,5 +446,81 @@ mod test {
         generate_trial::<MlKem512>();
         generate_trial::<MlKem768>();
         generate_trial::<MlKem1024>();
+    }
+
+    fn coverage_trial<P>()
+    where
+        P: ml_kem::KemCore + EncodingSize,
+        [(); P::K]:,
+        [(); P::DU]:,
+        [(); P::USIZE]:,
+        [(); P::ENCODED_SIZE]:,
+        [(); P::ENCODED_CT_SIZE]:,
+        [(); P::FIPS_ENCODED_SIZE]:,
+        [(); P::FIPS_ENCODED_USIZE]:,
+        [(); P::FIPS_ENCODED_CT_SIZE]:,
+    {
+        let mut rng = rand::thread_rng();
+        let (dk, ek) = Kemx::<P>::generate(&mut rng);
+
+        // DecapsulationKey as_bytes
+        // DecapsulationKey from_bytes
+        let dkb = dk.as_bytes();
+        let dk_parsed = KDecapsulationKey::<P>::from_bytes(&dkb);
+        assert_eq!(dk.0, dk_parsed.0);
+
+        // DecapsulationKey from_fips_bytes
+        let dk_fips_b = dk.0.as_bytes();
+        let dk_fips_parsed =
+            KDecapsulationKey::<P>::from_fips_bytes(&dk_fips_b).expect("failed fips parse");
+        assert_eq!(dk.0, dk_fips_parsed.0);
+
+        // EncapsulationKey encapsulate -> (SharedKey<P>, bool)
+        let (ct, sk) = ek.encapsulate(&mut rng).expect("failed encapsulate");
+
+        // KDecapsulationKey decapsulate(KCiphertext)
+        let ciphertext = KCiphertext::decode(&ct).expect("failed ciphertext decode");
+        let k_recv = dk.decapsulate(&ciphertext).expect("failed to decapsulate");
+        assert_eq!(sk, k_recv);
+
+        // KDecapsulationKey decapsulate(mk-kem::Ciphertext)
+        let ct_fips = ciphertext.fips;
+        let k_recv = dk.decapsulate(&ct_fips).expect("failed to decapsulate");
+        assert_eq!(sk, k_recv);
+
+        let mut ct_arr = [0u8; P::ENCODED_CT_SIZE];
+        ct_arr.copy_from_slice(&ct.as_bytes());
+
+        // KCiphertext try_from &[u8]
+        let _ct = KCiphertext::<P>::try_from(&ct_arr[..]).expect("failed parse");
+        // KCiphertext from [u8; ENCODED_CT_SIZE]
+        let _ct = KCiphertext::<P>::from(ct_arr);
+        // KEncodedCiphertext try_from &[u8]
+        let _ct = KEncodedCiphertext::<P>::try_from(&ct_arr[..]).expect("failed parse");
+        // KEncodedCiphertext from [u8; ENCODED_CT_SIZE]
+        let _ct = KCiphertext::<P>::from(ct_arr);
+
+        // KEncapsulationKey to_fips
+        let fips = ek.to_fips();
+        // KEncapsulationKey from_fips
+        let ek = KEncapsulationKey::<P>::from_fips(fips);
+
+        // KEncapsulationKey encapsulate_deterministic
+        #[cfg(feature = "deterministic")]
+        let (ct, sk) = ek
+            .encapsulate_deterministic((&[0u8; 32]).into())
+            .expect("failed encapsulate_deterministic");
+
+        let k_recv = dk
+            .decapsulate(&ct)
+            .expect("failed to decapsulate after deterministic encapsulation");
+        assert_eq!(k_recv, sk);
+    }
+
+    #[test]
+    fn coverage() {
+        coverage_trial::<MlKem512>();
+        coverage_trial::<MlKem768>();
+        coverage_trial::<MlKem1024>();
     }
 }
