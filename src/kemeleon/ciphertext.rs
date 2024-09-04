@@ -11,9 +11,10 @@ mod compress;
 use compress::{Compress, Du};
 mod precomputed;
 use precomputed::get_eq_set;
-
-mod hmac_drbg;
-use hmac_drbg::HmacDRBG;
+mod hkdf_rng;
+use hkdf_rng::HkdfRng;
+mod count_rng;
+// use count_rng::CountingRng;
 
 // ========================================================================== //
 // CipherText
@@ -55,6 +56,8 @@ where
     }
 }
 
+const HKDF_INFO: [u8; 40] = *b"kemeleon ct hkdf random number generator";
+
 impl<P> Ciphertext<P>
 where
     P: KemCore + EncodingSize,
@@ -76,9 +79,11 @@ where
 
         // create the DRBG
         // TODO: initialize hmac_drbg using sharedkey and ml_kem ciphertext
-        let mut drbg = HmacDRBG::<Sha256>::new(&ss[..], &fips_ct[..], b"");
+        // let mut drbg = HmacDRBG::<Sha256>::new(&ss[..], &fips_ct[..], b"");
+        // let mut rng = rand::thread_rng();
+        let mut rng = HkdfRng::<Sha256>::new(ss, fips_ct, &HKDF_INFO);
 
-        let encodable = kemeleon_ct.encode(&mut drbg)?;
+        let encodable = kemeleon_ct.encode(&mut rng)?;
         Ok((encodable, kemeleon_ct))
     }
 
