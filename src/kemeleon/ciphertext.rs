@@ -3,7 +3,7 @@ use crate::fips;
 use crate::{Barr8, EncodeError, EncodingSize, FipsEncodingSize, ARR_LEN};
 
 use ml_kem::KemCore;
-use rand::{seq::SliceRandom, CryptoRng, RngCore};
+use rand::{CryptoRng, RngCore};
 use rand_core::CryptoRngCore;
 use sha2::Sha256;
 
@@ -13,8 +13,6 @@ mod precomputed;
 use precomputed::get_eq_set;
 mod hkdf_rng;
 use hkdf_rng::HkdfRng;
-mod count_rng;
-// use count_rng::CountingRng;
 
 // ========================================================================== //
 // CipherText
@@ -77,10 +75,7 @@ where
             fips: fips_ct.clone(),
         };
 
-        // create the DRBG
-        // TODO: initialize hmac_drbg using sharedkey and ml_kem ciphertext
-        // let mut drbg = HmacDRBG::<Sha256>::new(&ss[..], &fips_ct[..], b"");
-        // let mut rng = rand::thread_rng();
+        // create the DRBG using sharedkey and ml_kem ciphertext
         let mut rng = HkdfRng::<Sha256>::new(ss, fips_ct, &HKDF_INFO);
 
         let encodable = kemeleon_ct.encode(&mut rng)?;
@@ -161,21 +156,28 @@ where
     }
 }
 
+#[allow(clippy::integer_division_remainder_used)]
 fn recover_rand<const DU: usize>(i: u16, rng: &mut impl CryptoRngCore) -> u16 {
     let mut compressed_i = i;
     compressed_i.compress::<Du<DU>>();
     let eq_set = get_eq_set::<DU>(compressed_i);
-    *eq_set
-        .choose(rng)
-        .expect("no equivalence found, should be impossible")
+
+    let mut b = [0u8; 2];
+    rng.fill_bytes(&mut b);
+    let idx = u16::from_be_bytes(b) % eq_set.len() as u16;
+
+    eq_set[idx as usize]
 }
 
 #[allow(clippy::integer_division_remainder_used)]
 fn rejection_sample<R: CryptoRng + RngCore>(c2: &[u8], rng: &mut R, dv: usize) -> bool {
     let mut result = true;
     let lim = 2_u32.pow(dv as u32);
+    let mut b = [0u8; 2];
     for val in c2 {
-        if *val == 0 && rng.next_u32() % 3329 < lim {
+        rng.fill_bytes(&mut b);
+        let y = u32::from(u16::from_be_bytes(b));
+        if *val == 0 && y % 3329 < lim {
             result = false;
         }
     }

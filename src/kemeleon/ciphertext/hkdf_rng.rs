@@ -90,19 +90,22 @@ where
     fn next_u32(&mut self) -> u32 {
         assert!(
             self.remaining() >= 4,
-            "not enough randomness remains in hkdf rng"
+            "not enough randomness remains in hkdf rng: need 4, {} remain",
+            self.remaining()
         );
 
         let mut b = [0u8; 4];
         b.copy_from_slice(&self.private_buf[self.count..self.count + 4]);
         self.count += 4;
+        print!(".");
         u32::from_be_bytes([b[0], b[1], b[2], b[3]])
     }
 
     fn next_u64(&mut self) -> u64 {
         assert!(
             self.remaining() >= 8,
-            "not enough randomness remains in hkdf rng"
+            "not enough randomness remains in hkdf rng: need 8, {} remain",
+            self.remaining()
         );
 
         let mut b = [0u8; 8];
@@ -114,7 +117,9 @@ where
     fn fill_bytes(&mut self, dest: &mut [u8]) {
         assert!(
             self.remaining() >= dest.len(),
-            "not enough randomness remains in hkdf rng"
+            "not enough randomness remains in hkdf rng: need {}, {} remain",
+            dest.len(),
+            self.remaining()
         );
 
         let k = dest.len();
@@ -188,7 +193,7 @@ mod test {
         let mut buf = [0u8; 32];
         for x_str in expected {
             drbg.fill_bytes(&mut buf);
-            assert_eq!(hex::encode(&buf), x_str);
+            assert_eq!(hex::encode(buf), x_str);
         }
     }
 
