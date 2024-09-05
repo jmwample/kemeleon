@@ -220,4 +220,29 @@ mod test {
             buf1[i * 4..(i * 4) + 4].copy_from_slice(&b[0..4]);
         }
     }
+
+    #[test]
+    #[should_panic(expected = "not enough randomness remains in hkdf rng: need 8, 7 remain")]
+    fn read_u64_too_far() {
+        let mut rng = HkdfRng::<Sha256>::new(b"aaa", b"bbb", b"ccc");
+        rng.count = MAX_FILL - 7;
+        rng.next_u64();
+    }
+
+    #[test]
+    #[should_panic(expected = "not enough randomness remains in hkdf rng: need 4, 3 remain")]
+    fn read_u32_too_far() {
+        let mut rng = HkdfRng::<Sha256>::new(b"aaa", b"bbb", b"ccc");
+        rng.count = MAX_FILL - 3;
+        rng.next_u32();
+    }
+
+    #[test]
+    #[should_panic(expected = "not enough randomness remains in hkdf rng: need 2, 1 remain")]
+    fn fill_bytes_too_far() {
+        let mut rng = HkdfRng::<Sha256>::new(b"aaa", b"bbb", b"ccc");
+        rng.count = MAX_FILL - 1;
+        let mut buf = [0u8; 2];
+        rng.try_fill_bytes(&mut buf).expect("cannot happen");
+    }
 }
