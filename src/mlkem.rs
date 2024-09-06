@@ -1,8 +1,7 @@
 use crate::{fips, kemeleon::Encodable, EncodingSize, FipsEncodingSize, Transcode, ARR_LEN};
 use crate::{Encode, EncodeError};
 
-use core::fmt::Debug;
-use std::marker::PhantomData;
+use core::{fmt::Debug, marker::PhantomData};
 
 use kem::{Decapsulate, Encapsulate};
 use ml_kem::{Ciphertext, Encoded, EncodedSizeUser, KemCore, SharedKey};
@@ -125,9 +124,10 @@ where
         rng: &mut impl CryptoRngCore,
     ) -> Result<(KEncodedCiphertext<P>, SharedKey<P>), Self::Error> {
         for _ in 0..MAX_RETRIES {
-            let (ek, ss) = self.key.encapsulate(rng).map_err(|_| {
-                EncodeError::EncapsulationError("ML-KEM encapsulation error".into())
-            })?;
+            let (ek, ss) = self
+                .key
+                .encapsulate(rng)
+                .map_err(|_| EncodeError::EncapsulationError)?;
             let (success, ct) = KCiphertext::<P>::new(&ek, &ss)?;
 
             if !success {
@@ -159,7 +159,7 @@ where
         let (ek, ss) = self
             .key
             .encapsulate_deterministic(m)
-            .map_err(|_| EncodeError::EncapsulationError("failed encapsulation".into()))?;
+            .map_err(|_| EncodeError::EncapsulationError)?;
         let (_, ct) = KCiphertext::<P>::new(&ek, &ss)?;
 
         Ok((KEncodedCiphertext(ct.bytes), ss))
@@ -306,7 +306,7 @@ where
         let k_send = ct.fips;
         self.0
             .decapsulate(&k_send)
-            .map_err(|e| EncodeError::DecapsulationError(format!("failed to decapsulate: {e:?}")))
+            .map_err(|_| EncodeError::DecapsulationError)
     }
 }
 
@@ -326,7 +326,7 @@ where
     fn decapsulate(&self, ciphertext: &KCiphertext<P>) -> Result<SharedKey<P>, Self::Error> {
         self.0
             .decapsulate(&ciphertext.fips)
-            .map_err(|e| EncodeError::DecapsulationError(format!("failed to decapsulate: {e:?}")))
+            .map_err(|_| EncodeError::DecapsulationError)
     }
 }
 
@@ -346,7 +346,7 @@ where
     fn decapsulate(&self, ciphertext: &Ciphertext<P>) -> Result<SharedKey<P>, Self::Error> {
         self.0
             .decapsulate(ciphertext)
-            .map_err(|e| EncodeError::DecapsulationError(format!("failed to decapsulate: {e:?}")))
+            .map_err(|_| EncodeError::DecapsulationError)
     }
 }
 
@@ -478,11 +478,11 @@ mod test {
         // KEncapsulationKey to_fips
         let fips = ek.to_fips();
         // KEncapsulationKey from_fips
-        let ek = KEncapsulationKey::<P>::from_fips(fips);
+        let __ek = KEncapsulationKey::<P>::from_fips(fips);
 
         // KEncapsulationKey encapsulate_deterministic
         #[cfg(feature = "deterministic")]
-        let (ct, sk) = ek
+        let (ct, sk) = __ek
             .encapsulate_deterministic((&[0u8; 32]).into())
             .expect("failed encapsulate_deterministic");
 

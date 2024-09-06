@@ -87,17 +87,17 @@ Core features
 - [x] Implement and test ciphertext encoding / decoding
 - [x] Pass on public docs
 - [x] Switch from using [`std::io::Error`] to a locally defined error type.
+- [x] Ciphertext encoding determinism using hkdf, hmac-drbg, or something similar
+- [x] Modify implementation to be `no-std` compatible
+  - [x] Swap from custom error to &str error just for simplicity (`core::error::Error` is too new)
 - [x] GH actions for testing, building, linting, etc.
-  - [ ] tests/builds for stable releases (const generics only work on nightly)
-- [ ] Ciphertext encoding determinism using hkdf, hmac-drbg, or something similar
-- [ ] Nist vectors Integration tests
-- [ ] Modify implementation to be `no-std` compatible
-  - [ ] Swap from custom error to &str error just for simplicity (`core::error::Error` is too new)
-- [ ] Move const generics (`#![feature(generics_const_exprs)]`) to its own branch
-  - const generics are an unstable feature, even though this is a very simple
-    application of the feature it is bad practice to ask people use it in its current state.
 - [ ] Use [`generic_array`](https://docs.rs/generic-array/latest/generic_array/) for
   all type based generics requiring sized arrays
+  - [ ] Move const generics (`#![feature(generics_const_exprs)]`) to its own branch
+    - const generics are an unstable feature, even though this is a very simple
+      application of the feature it is bad practice to ask people use it in its current state.
+  - [ ] CI tests/builds for stable releases (const generics only work on nightly)
+- [ ] Nist vectors Integration tests
 
 Cleanup
 

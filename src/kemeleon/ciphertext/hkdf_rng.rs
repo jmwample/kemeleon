@@ -101,7 +101,6 @@ where
         let mut b = [0u8; 4];
         b.copy_from_slice(&self.private_buf[self.count..self.count + 4]);
         self.count += 4;
-        print!(".");
         u32::from_be_bytes([b[0], b[1], b[2], b[3]])
     }
 

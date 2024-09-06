@@ -49,8 +49,10 @@ jobs:
         components: clippy, rustfmt
     - name: Install clippy
       run: rustup component add clippy --toolchain nightly
-    - name: Lint
-      run: cargo clippy --workspace --all-targets --verbose --all-features
+    - name: Lint w/ Features
+      run: cargo clippy --workspace --all-targets --verbose --all-features --release
+    - name: Lint w/out Features
+      run: cargo clippy --workspace --all-targets  --no-default-features --release
 
 #     bench:
 #       name: Check that benchmarks compile
@@ -82,7 +84,7 @@ jobs:
 #               sudo touch /etc/apt/sources.list.d/i386-cross-compile-sources.list;
 #               echo "deb [arch=i386] http://ports.ubuntu.com/ focal universe\ndeb [arch=i386] http://ports.ubuntu.com/ focal-updates universe\n" | sudo tee -a /etc/apt/sources.list.d/i386-cross-compile-sources.list;
 #               sudo apt update && sudo apt install gcc-multilib libsqlite3-dev:i386
-# 
+#
 #           # 64-bit target
 #           - target: x86_64-unknown-linux-gnu
 #     steps:
