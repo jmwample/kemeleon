@@ -70,6 +70,10 @@ where
     pub fn remaining(&self) -> usize {
         MAX_FILL - self.count
     }
+
+    pub fn used(&self) -> usize {
+        self.count
+    }
 }
 
 impl<D> RngCore for HkdfRng<D>
