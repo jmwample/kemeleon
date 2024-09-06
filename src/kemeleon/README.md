@@ -88,12 +88,22 @@ fn rejection_sample<R: CryptoRng + RngCore>(c2: &[u16; 256], rng: &mut R, dv: us
 While we could wait until we detect an element with value equal to 0 before sampling the random number generator
 this could lead to a timing correlation based on the number of `0s` in the V element. So instead we sample
 the random source for all `N` values, failing fast if we find that this round the chosen value is not encodable.
-In total we require:
+
+**TLDR: In total we require:**
 
 $$
-K \times N \times 2 + N \times 2 = 2N(K + 1) \\[10pt]
-512 => (N:256, K:2) => 1536 \text{ B}\\
-768 => (N:256, K:3) => 2048 \text{ B} \\
+K \times N \times 2 + N \times 2 = 2N(K + 1)
+$$
+
+$$
+512 => (N:256, K:2) => 1536 \text{ B} \newline
+$$
+
+$$
+768 => (N:256, K:3) => 2048 \text{ B} \newline
+$$
+
+$$
 1024 => (N:256, K:4) => 2560 \text{ B}
 $$
 
