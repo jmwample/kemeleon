@@ -2,8 +2,6 @@ use super::{vector_decode, vector_encode, Encode};
 use crate::{fips, FieldElement};
 use crate::{Barr8, EncodeError, EncodingSize, FipsEncodingSize, ARR_LEN};
 
-use alloc::format;
-
 use ml_kem::KemCore;
 use rand::{CryptoRng, RngCore};
 use rand_core::CryptoRngCore;
@@ -45,9 +43,9 @@ where
 
     fn try_from_bytes(b: impl AsRef<[u8]>) -> Result<Self, Self::Error> {
         if b.as_ref().is_empty() {
-            return Err(EncodeError::ParseError("empty bytestring provided".into()));
+            return Err(EncodeError::invalid_ctxt_len(0_usize));
         } else if b.as_ref().len() < P::ENCODED_CT_SIZE {
-            return Err(EncodeError::ParseError("bytestring too short".into()));
+            return Err(EncodeError::invalid_ctxt_len(b.as_ref().len()));
         }
         let mut arr = [0u8; P::ENCODED_CT_SIZE];
         arr.copy_from_slice(&b.as_ref()[..P::ENCODED_CT_SIZE]);
@@ -134,8 +132,7 @@ where
         let (c1, c2) = split_ct::<P>(&ct_bytes);
 
         let mut values = [[0u16; ARR_LEN]; P::K];
-        vector_decode::<P>(&c1, values.as_flattened_mut())
-            .map_err(|e| EncodeError::DecodeError(format!("error occured while decoding {e}")))?;
+        vector_decode::<P>(&c1, values.as_flattened_mut())?;
 
         // re-compress the values
         let c1 = values.as_flattened_mut();

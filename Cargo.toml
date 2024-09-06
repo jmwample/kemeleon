@@ -12,6 +12,7 @@ rustdoc-args = [
 [features]
 default=["deterministic"]
 deterministic = ["ml-kem/deterministic"]
+alloc = []
 
 [dependencies]
 num-bigint = "0.4.6"

@@ -8,7 +8,6 @@ pub use crate::mlkem::KDecapsulationKey as DecapsulationKey;
 pub use crate::mlkem::KEncapsulationKey as EncapsulationKey;
 use crate::{EncodeError, EncodingSize, FieldElement, FipsEncodingSize};
 
-use alloc::format;
 use core::cmp::min;
 
 use ml_kem::KemCore;
@@ -54,11 +53,7 @@ where
 {
     let dst = c.as_mut();
     if dst.len() < P::T_HAT_LEN {
-        return Err(EncodeError::EncodeError(format!(
-            "invalid dst array size. {} < {}",
-            P::T_HAT_LEN,
-            dst.len()
-        )));
+        return Err(EncodeError::bad_dst_array(P::T_HAT_LEN, dst.len()));
     }
 
     let mut out = BigUint::ZERO;
@@ -91,10 +86,7 @@ where
     [(); P::FIPS_ENCODED_SIZE]:,
 {
     if c.as_ref().len() < <P as EncodingSize>::T_HAT_LEN {
-        return Err(EncodeError::DecodeError(format!(
-            "incorrect ciphertext length {}",
-            c.as_ref().len()
-        )));
+        return Err(EncodeError::invalid_ctxt_len(c.as_ref().len()));
     }
 
     let base = BigUint::from(FieldElement::Q);

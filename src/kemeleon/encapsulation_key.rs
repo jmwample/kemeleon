@@ -1,8 +1,6 @@
 use super::{vector_decode, vector_encode, EncapsulationKey, Encodable, Encode};
 use crate::{fips, Barr8, EncodeError, EncodingSize, FipsEncodingSize, ARR_LEN, RHO_LEN};
 
-use alloc::format;
-
 use ml_kem::{EncodedSizeUser, KemCore};
 
 // ========================================================================== //
@@ -79,7 +77,7 @@ where
 {
     fn decode_priv(c: impl AsRef<[u8]>) -> Result<Self, EncodeError> {
         if c.as_ref().len() < P::ENCODED_SIZE {
-            return Err(EncodeError::ParseError("incorrect length".into()));
+            return Err(EncodeError::invalid_ek_len(c.as_ref().len()));
         }
 
         // Get the random mask byte from the high order bits
@@ -105,11 +103,7 @@ where
     fn encode_priv(&self, mut dst: impl AsMut<[u8]>) -> Result<bool, EncodeError> {
         let k = dst.as_mut();
         if k.len() < P::ENCODED_SIZE {
-            return Err(EncodeError::EncodeError(format!(
-                "invalid dst array size. {} < {}",
-                k.len(),
-                P::ENCODED_SIZE,
-            )));
+            return Err(EncodeError::bad_dst_array(P::ENCODED_SIZE, k.len()));
         }
 
         let vals_fips_encoded = self.key.as_bytes().to_vec();

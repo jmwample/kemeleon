@@ -10,9 +10,10 @@
 #![feature(generic_const_exprs)]
 #![doc = include_str!("../README.md")]
 
-extern crate alloc;
-
 use core::fmt::Debug;
+
+#[cfg(feature = "alloc")]
+extern crate alloc;
 
 mod errors;
 mod fips;
