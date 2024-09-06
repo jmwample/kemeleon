@@ -1,9 +1,9 @@
 use super::{vector_decode, vector_encode, Encode};
-use crate::fips;
+use crate::{fips, FieldElement};
 use crate::{Barr8, EncodeError, EncodingSize, FipsEncodingSize, ARR_LEN};
 
 use ml_kem::KemCore;
-use rand::{seq::SliceRandom, CryptoRng, RngCore};
+use rand::{CryptoRng, RngCore};
 use rand_core::CryptoRngCore;
 use sha2::Sha256;
 
@@ -11,9 +11,8 @@ mod compress;
 use compress::{Compress, Du};
 mod precomputed;
 use precomputed::get_eq_set;
-
-mod hmac_drbg;
-use hmac_drbg::HmacDRBG;
+mod hkdf_rng;
+use hkdf_rng::HkdfRng;
 
 // ========================================================================== //
 // CipherText
@@ -55,6 +54,8 @@ where
     }
 }
 
+const HKDF_INFO: [u8; 40] = *b"kemeleon ct hkdf random number generator";
+
 impl<P> Ciphertext<P>
 where
     P: KemCore + EncodingSize,
@@ -74,11 +75,10 @@ where
             fips: fips_ct.clone(),
         };
 
-        // create the DRBG
-        // TODO: initialize hmac_drbg using sharedkey and ml_kem ciphertext
-        let mut drbg = HmacDRBG::<Sha256>::new(&ss[..], &fips_ct[..], b"");
+        // create the DRBG using sharedkey and ml_kem ciphertext
+        let mut rng = HkdfRng::<Sha256>::new(ss, fips_ct, &HKDF_INFO);
 
-        let encodable = kemeleon_ct.encode(&mut drbg)?;
+        let encodable = kemeleon_ct.encode(&mut rng)?;
         Ok((encodable, kemeleon_ct))
     }
 
@@ -156,25 +156,31 @@ where
     }
 }
 
+#[allow(clippy::integer_division_remainder_used)]
 fn recover_rand<const DU: usize>(i: u16, rng: &mut impl CryptoRngCore) -> u16 {
     let mut compressed_i = i;
     compressed_i.compress::<Du<DU>>();
     let eq_set = get_eq_set::<DU>(compressed_i);
-    *eq_set
-        .choose(rng)
-        .expect("no equivalence found, should be impossible")
+
+    let mut b = [0u8; 2];
+    rng.fill_bytes(&mut b);
+    let idx = u16::from_be_bytes(b) % eq_set.len() as u16;
+
+    eq_set[idx as usize]
 }
 
 #[allow(clippy::integer_division_remainder_used)]
 fn rejection_sample<R: CryptoRng + RngCore>(c2: &[u8], rng: &mut R, dv: usize) -> bool {
-    let mut result = true;
-    let lim = 2_u32.pow(dv as u32);
-    for val in c2 {
-        if *val == 0 && rng.next_u32() % 3329 < lim {
-            result = false;
+    let lim = 2_u16.pow(dv as u32);
+    let mut b = [0u8; 2];
+    for val in fips::ct_vdecompress(dv, c2) {
+        rng.fill_bytes(&mut b);
+        let y = u16::from_be_bytes(b);
+        if val == 0 && y % FieldElement::Q < lim {
+            return false;
         }
     }
-    result
+    true
 }
 
 fn split_fips_ct<P>(b: &[u8]) -> (&[u8], &[u8])

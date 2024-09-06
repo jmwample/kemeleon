@@ -176,6 +176,35 @@ where
     (rho, vals)
 }
 
+// ========================================================================== //
+// FIPs spec Ciphertext Utilities
+// ========================================================================== //
+
+pub(crate) fn ct_vdecompress(dv: usize, bytes: &[u8]) -> [u16; ARR_LEN] {
+    let (val_step, byte_step) = get_relative_steps(dv);
+    let mask = (1 << dv) - 1;
+
+    let mut vals = [0u16; ARR_LEN];
+
+    let vc = vals.chunks_mut(val_step);
+    let bc = bytes.as_ref().chunks(byte_step);
+    for (v, b) in vc.zip(bc) {
+        let mut xb = [0u8; 16];
+        xb[..byte_step].copy_from_slice(b);
+
+        let x = u128::from_le_bytes(xb);
+        for (j, v_out) in v.iter_mut().enumerate() {
+            let val: u16 = (x >> (dv * j)).truncate();
+            *v_out = val & mask;
+
+            if dv == 12 {
+                *v_out %= FieldElement::Q;
+            }
+        }
+    }
+    vals
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
