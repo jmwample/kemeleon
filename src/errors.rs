@@ -1,6 +1,7 @@
 #[cfg(doc)]
 use crate::{Ciphertext, EncapsulationKey};
 
+use alloc::string::String;
 use core::array::TryFromSliceError;
 
 /// Errors encountered while using the Kemeleon encoding strategy.
@@ -28,8 +29,8 @@ pub enum EncodeError {
 
 impl core::error::Error for EncodeError {}
 
-impl std::fmt::Display for EncodeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for EncodeError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             // TODO: make error printing better
             EncodeError::ParseError(e) => write!(f, "failed to parse: {e}"),

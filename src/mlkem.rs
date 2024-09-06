@@ -1,8 +1,8 @@
 use crate::{fips, kemeleon::Encodable, EncodingSize, FipsEncodingSize, Transcode, ARR_LEN};
 use crate::{Encode, EncodeError};
 
-use core::fmt::Debug;
-use std::marker::PhantomData;
+use alloc::format;
+use core::{fmt::Debug, marker::PhantomData};
 
 use kem::{Decapsulate, Encapsulate};
 use ml_kem::{Ciphertext, Encoded, EncodedSizeUser, KemCore, SharedKey};

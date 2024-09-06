@@ -8,6 +8,7 @@ pub use crate::mlkem::KDecapsulationKey as DecapsulationKey;
 pub use crate::mlkem::KEncapsulationKey as EncapsulationKey;
 use crate::{EncodeError, EncodingSize, FieldElement, FipsEncodingSize};
 
+use alloc::format;
 use core::cmp::min;
 
 use ml_kem::KemCore;

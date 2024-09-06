@@ -1,4 +1,4 @@
-// #![no_std]
+#![cfg_attr(not(test), no_std)]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![warn(clippy::pedantic)] // Be pedantic by default
 #![warn(clippy::integer_division_remainder_used)] // Be judicious about using `/` and `%`
@@ -9,6 +9,8 @@
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 #![doc = include_str!("../README.md")]
+
+extern crate alloc;
 
 use core::fmt::Debug;
 
@@ -24,7 +26,7 @@ pub use kemeleon::*;
 pub(crate) struct FieldElement(pub u16);
 
 impl Debug for FieldElement {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         self.0.fmt(f)
     }
 }

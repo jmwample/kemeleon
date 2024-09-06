@@ -89,10 +89,10 @@ Core features
 - [x] Switch from using [`std::io::Error`] to a locally defined error type.
 - [x] GH actions for testing, building, linting, etc.
   - [ ] tests/builds for stable releases (const generics only work on nightly)
-- [ ] Ciphertext encoding determinism using hkdf, hmac-drbg, or something similar
-- [ ] Nist vectors Integration tests
-- [ ] Modify implementation to be `no-std` compatible
+- [x] Ciphertext encoding determinism using hkdf, hmac-drbg, or something similar
+- [x] Modify implementation to be `no-std` compatible
   - [ ] Swap from custom error to &str error just for simplicity (`core::error::Error` is too new)
+- [ ] Nist vectors Integration tests
 - [ ] Move const generics (`#![feature(generics_const_exprs)]`) to its own branch
   - const generics are an unstable feature, even though this is a very simple
     application of the feature it is bad practice to ask people use it in its current state.

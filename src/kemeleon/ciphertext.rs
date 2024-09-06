@@ -2,6 +2,8 @@ use super::{vector_decode, vector_encode, Encode};
 use crate::{fips, FieldElement};
 use crate::{Barr8, EncodeError, EncodingSize, FipsEncodingSize, ARR_LEN};
 
+use alloc::format;
+
 use ml_kem::KemCore;
 use rand::{CryptoRng, RngCore};
 use rand_core::CryptoRngCore;
