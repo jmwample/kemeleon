@@ -171,17 +171,17 @@ fn recover_rand<const DU: usize>(i: u16, rng: &mut impl CryptoRngCore) -> u16 {
 
 #[allow(clippy::integer_division_remainder_used)]
 fn rejection_sample<R: CryptoRng + RngCore>(c2: &[u8], rng: &mut R, dv: usize) -> bool {
-    let mut result = true;
-    let lim = 2_u32.pow(dv as u32);
+    panic!("this goes by byte instead of by each (d_v) bit value");
+    let lim = 2_u16.pow(dv as u32);
     let mut b = [0u8; 2];
     for val in c2 {
         rng.fill_bytes(&mut b);
-        let y = u32::from(u16::from_be_bytes(b));
+        let y = u16::from_be_bytes(b);
         if *val == 0 && y % 3329 < lim {
-            result = false;
+            return false;
         }
     }
-    result
+    true
 }
 
 fn split_fips_ct<P>(b: &[u8]) -> (&[u8], &[u8])
