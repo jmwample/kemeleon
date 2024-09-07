@@ -8,7 +8,7 @@ use crate::{fips::Truncate, FieldElement};
 
 use core::slice::IterMut;
 
-pub(crate) struct Du<const USIZE: usize> {}
+use hybrid_array::ArraySize;
 
 pub(crate) trait CompressionFactor {
     const USIZE: usize;
@@ -19,8 +19,8 @@ pub(crate) trait CompressionFactor {
     const Q_HALF: u64 = (FieldElement::Q64 + 1) >> 1;
 }
 
-impl<const USIZE: usize> CompressionFactor for Du<{ USIZE }> {
-    const USIZE: usize = USIZE;
+impl<D: ArraySize> CompressionFactor for D {
+    const USIZE: usize = Self::USIZE;
     const POW2_HALF: u32 = 1 << (Self::USIZE - 1);
     const MASK: u16 = ((1_u16) << Self::USIZE) - 1;
     const DIV_SHIFT: usize = 34;
@@ -101,6 +101,7 @@ impl<'a> Compress for IterMut<'a, u16> {
 pub(crate) mod test {
     use super::*;
     use num_rational::Ratio;
+    use hybrid_array::typenum::{U1, U4, U5, U6, U10, U11, U12};
 
     fn rational_compress<D: CompressionFactor>(input: u16) -> u16 {
         let fraction = Ratio::new(u32::from(input) * (1 << D::USIZE), FieldElement::Q32);
@@ -179,21 +180,21 @@ pub(crate) mod test {
 
     #[test]
     fn decompress_compress() {
-        compress_decompress_properties::<Du<1>>();
-        compress_decompress_properties::<Du<4>>();
-        compress_decompress_properties::<Du<5>>();
-        compress_decompress_properties::<Du<6>>();
-        compress_decompress_properties::<Du<10>>();
-        compress_decompress_properties::<Du<11>>();
+        compress_decompress_properties::<U1>();
+        compress_decompress_properties::<U4>();
+        compress_decompress_properties::<U5>();
+        compress_decompress_properties::<U6>();
+        compress_decompress_properties::<U10>();
+        compress_decompress_properties::<U11>();
         // preservation under decompression first only holds for d < 12
-        compression_decompression_inequality::<Du<12>>();
+        compression_decompression_inequality::<U12>();
 
-        compress_decompress_KATs::<Du<1>>();
-        compress_decompress_KATs::<Du<4>>();
-        compress_decompress_KATs::<Du<5>>();
-        compress_decompress_KATs::<Du<6>>();
-        compress_decompress_KATs::<Du<10>>();
-        compress_decompress_KATs::<Du<11>>();
-        compress_decompress_KATs::<Du<12>>();
+        compress_decompress_KATs::<U1>();
+        compress_decompress_KATs::<U4>();
+        compress_decompress_KATs::<U5>();
+        compress_decompress_KATs::<U6>();
+        compress_decompress_KATs::<U10>();
+        compress_decompress_KATs::<U11>();
+        compress_decompress_KATs::<U12>();
     }
 }

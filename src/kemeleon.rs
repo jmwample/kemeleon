@@ -49,7 +49,6 @@ pub(crate) fn vector_encode<P>(
 ) -> Result<bool, EncodeError>
 where
     P: KemCore + EncodingSize,
-    [(); P::K]:,
 {
     let dst = c.as_mut();
     if dst.len() < P::T_HAT_LEN {
@@ -82,8 +81,6 @@ pub(crate) fn vector_decode<P>(
 ) -> Result<(), EncodeError>
 where
     P: KemCore + EncodingSize,
-    [(); P::K]:,
-    [(); P::FIPS_ENCODED_SIZE]:,
 {
     if c.as_ref().len() < <P as EncodingSize>::T_HAT_LEN {
         return Err(EncodeError::invalid_ctxt_len(c.as_ref().len()));

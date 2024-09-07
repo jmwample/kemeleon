@@ -144,7 +144,6 @@ pub(crate) fn ek_encode<D>(
 ) -> Barr8<{ D::FIPS_ENCODED_SIZE }>
 where
     D: EncodingSize,
-    [(); D::USIZE]:,
 {
     let mut bytes = [0u8; D::FIPS_ENCODED_SIZE];
     let idx = D::FIPS_ENCODED_SIZE - RHO_LEN;
@@ -158,7 +157,6 @@ where
 pub(crate) fn ek_decode<D>(bytes: impl AsRef<[u8]>) -> ([u8; 32], NttArray<{ D::K }>)
 where
     D: EncodingSize,
-    [(); D::USIZE]:,
 {
     //TODO: Lenth check on input for safety?
     assert!(
@@ -208,7 +206,7 @@ pub(crate) fn ct_vdecompress(dv: usize, bytes: &[u8]) -> [u16; ARR_LEN] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{EncodingSize, FipsEncodingSize, RHO_LEN};
+    use crate::{EncodingSize, RHO_LEN};
     use hex_literal::hex;
 
     use ml_kem::{Encoded, EncodedSizeUser, KemCore, MlKem1024, MlKem512, MlKem768};
@@ -216,9 +214,6 @@ mod tests {
     fn fips_encode_trial<D>()
     where
         D: KemCore + EncodingSize,
-        [(); D::USIZE]:,
-        [(); <D as EncodingSize>::K]:,
-        [(); <D as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
     {
         let mut rng = rand::thread_rng();
         let (_, ek) = D::generate(&mut rng);

@@ -3098,6 +3098,7 @@ mod test {
     use crate::kemeleon::ciphertext::compress::*;
     use crate::{EncodingSize, FieldElement};
 
+    use hybrid_array::ArraySize;
     use ml_kem::{MlKem1024, MlKem512, MlKem768};
 
     use super::*;
@@ -3128,16 +3129,12 @@ mod test {
         eq_set_completeness_test("du:11, [MlKem1024]", &EQ_SET_11[..]);
     }
 
-    fn eq_sets_match_test<D>(desc: &str)
-    where
-        D: EncodingSize,
-        [(); D::DU]:,
-    {
+    fn eq_sets_match_test<D: EncodingSize>(desc: &str) {
         for v in 0..FieldElement::Q {
             let mut compressed_v = v;
-            compressed_v.compress::<Du<{ D::DU }>>();
+            compressed_v.compress::<D::DU>();
 
-            let eq_set = get_eq_set::<{ D::DU }>(compressed_v);
+            let eq_set = get_eq_set::<D::DU>(compressed_v);
             assert!(
                 eq_set.to_vec().contains(&v),
                 "{desc}: {v} maps to incorrect set {eq_set:?}",

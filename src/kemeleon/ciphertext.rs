@@ -25,11 +25,6 @@ pub use crate::mlkem::KEncodedCiphertext as EncodedCiphertext;
 impl<P> Encode for EncodedCiphertext<P>
 where
     P: KemCore + EncodingSize,
-    [(); P::K]:,
-    [(); P::DU]:,
-    [(); P::ENCODED_SIZE]:,
-    [(); P::ENCODED_CT_SIZE]:,
-    [(); P::FIPS_ENCODED_SIZE]:,
 {
     /// Encoded Cuphertext Type
     type ET = Barr8<{ P::ENCODED_CT_SIZE }>;
@@ -59,11 +54,6 @@ const HKDF_INFO: [u8; 40] = *b"kemeleon ct hkdf random number generator";
 impl<P> Ciphertext<P>
 where
     P: KemCore + EncodingSize,
-    [(); P::K]:,
-    [(); P::DU]:,
-    [(); P::ENCODED_SIZE]:,
-    [(); P::ENCODED_CT_SIZE]:,
-    [(); P::FIPS_ENCODED_SIZE]:,
 {
     pub(crate) fn new(
         fips_ct: &ml_kem::Ciphertext<P>,
@@ -122,11 +112,7 @@ where
         Ok(success)
     }
 
-    pub(crate) fn decode(c: impl AsRef<[u8]>) -> Result<Self, EncodeError>
-    where
-        [(); P::FIPS_ENCODED_USIZE]:,
-        [(); P::FIPS_ENCODED_CT_SIZE]:,
-    {
+    pub(crate) fn decode(c: impl AsRef<[u8]>) -> Result<Self, EncodeError> {
         let mut ct_bytes = [0u8; P::ENCODED_CT_SIZE];
         ct_bytes[..].copy_from_slice(&c.as_ref()[..P::ENCODED_CT_SIZE]);
         let (c1, c2) = split_ct::<P>(&ct_bytes);
@@ -205,7 +191,6 @@ where
 fn concat_ct<P>(u: &[u8], v: &[u8]) -> [u8; P::ENCODED_CT_SIZE]
 where
     P: EncodingSize,
-    [(); P::ENCODED_CT_SIZE]:,
 {
     let mut out = [0u8; P::ENCODED_CT_SIZE];
     out[..P::ENCODED_USIZE].copy_from_slice(&u[..P::ENCODED_USIZE]);
@@ -224,14 +209,6 @@ mod test {
     fn encode_decode_trial<P>(desc: &str)
     where
         P: ml_kem::KemCore + EncodingSize,
-        [(); P::K]:,
-        [(); P::DU]:,
-        [(); P::USIZE]:,
-        [(); P::ENCODED_SIZE]:,
-        [(); P::ENCODED_CT_SIZE]:,
-        [(); P::FIPS_ENCODED_SIZE]:,
-        [(); P::FIPS_ENCODED_USIZE]:,
-        [(); P::FIPS_ENCODED_CT_SIZE]:,
     {
         let mut rng = rand::thread_rng();
         // use Kemx::generate so that we don't have to worry about the

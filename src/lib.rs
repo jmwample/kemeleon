@@ -6,8 +6,6 @@
 // do not warn about downcasting
 #![deny(missing_docs)] // Require all public interfaces to be documented
 #![allow(clippy::missing_errors_doc)] // adding Errors section is more than I want to do
-#![allow(incomplete_features)]
-#![feature(generic_const_exprs)]
 #![doc = include_str!("../README.md")]
 
 use core::fmt::Debug;
@@ -21,6 +19,7 @@ mod kemeleon;
 mod mlkem;
 
 pub use errors::*;
+use hybrid_array::ArraySize;
 pub use kemeleon::*;
 
 #[derive(Copy, Clone, Default, PartialEq, PartialOrd)]
@@ -98,10 +97,20 @@ pub trait Transcode {
 ///
 pub trait EncodingSize {
     /// Number of bits used to represent field elements
-    const USIZE: usize = 12_usize;
+    type USIZE;
 
     /// Number of field elements per equation.
-    const K: usize;
+    type K: ArraySize;
+
+    /// The bit width of encoded integers in the `u` vector in a ciphertext
+    type DU: ArraySize;
+    /// The bit width of encoded integers in the `v` vector in a ciphertext
+    type DV: ArraySize;
+
+    /// Number of bytes for just `t_hat` values in a kemeleon encoded value
+    ///
+    /// Computed as: $\left\lceil (HIGH\\_ORDER\\_BIT -1)/8 \right\rceil$
+    const T_HAT_LEN: usize;
 
     /// Bitmask for the high order byte which will be less than a full byte of
     /// random bits when encoded.
@@ -111,16 +120,9 @@ pub trait EncodingSize {
     /// Bitmask for the high order byte which will be less than a full byte of
     /// random bits when encoded. Inversion of [`EncodingSize::MSB_BITMASK`].
     const MSB_BITMASK_INV: u8 = !Self::MSB_BITMASK;
+}
 
-    /// The bit width of encoded integers in the `u` vector in a ciphertext
-    const DU: usize;
-    /// The bit width of encoded integers in the `v` vector in a ciphertext
-    const DV: usize;
-
-    /// Number of bytes for just `t_hat` values in a kemeleon encoded value
-    ///
-    /// Computed as: $\left\lceil (HIGH\\_ORDER\\_BIT -1)/8 \right\rceil$
-    const T_HAT_LEN: usize;
+pub trait KemeleonEncodingSize: EncodingSize {
     /// Size of the Kemeleon encoded string as bytes.
     ///
     /// Computed as: $T\\_HAT\\_LEN + RHO\\_LEN$
@@ -131,7 +133,7 @@ pub trait EncodingSize {
     #[allow(clippy::doc_markdown)]
     /// Size of the V value of the Kemeleon encoded ciphertext. N values of Dv Bit size.
     /// The number of bytes is computed as $ ENCODED_VSIZE = n * D_v / 8 \text{ --- for } n=256 $
-    const ENCODED_VSIZE: usize = 32 * Self::DV;
+    type ENCODED_VSIZE: usize = Prod<U32, Self::DV>::OutputSize;
     /// Size of the combined kemeleon encoded ciphertext.
     const ENCODED_CT_SIZE: usize = Self::ENCODED_USIZE + Self::ENCODED_VSIZE;
 }
@@ -143,37 +145,41 @@ pub trait FipsEncodingSize: EncodingSize {
     /// Length of an encoded FIPS encapsulation key
     const FIPS_ENCODED_SIZE: usize = Self::FIPS_T_HAT_LEN + RHO_LEN;
 
-    /// Size of the compressed U element of an ML-KEM ciphertext.
-    const FIPS_ENCODED_USIZE: usize = 32 * Self::DU * Self::K;
-    /// Size of the compressed V element of an ML-KEM ciphertext.
-    const FIPS_ENCODED_VSIZE: usize = 32 * Self::DV;
+    /// Size of the compressed U element of an ML-KEM ciphertext. $Du * K * 256 / 8$
+    const FIPS_ENCODED_USIZE: usize = U32 * Self::DU * Self::K;
+    /// Size of the compressed V element of an ML-KEM ciphertext. $Dv * 256 / 8$
+    const FIPS_ENCODED_VSIZE: usize = U32 * Self::DV;
     /// Size of a ciphertext encoded and compressed using FIPS standard.
     const FIPS_ENCODED_CT_SIZE: usize = Self::FIPS_ENCODED_USIZE + Self::FIPS_ENCODED_VSIZE;
 }
 impl<T: EncodingSize> FipsEncodingSize for T {}
 
+use hybrid_array::typenum::{U2, U3, U4, U5, U10, U11, U12, U32};
 impl EncodingSize for ml_kem::MlKem512 {
-    const K: usize = 2;
-    const DU: usize = 10;
-    const DV: usize = 4;
+    type USIZE = U12;
+    type K = U2;
+    type DU = U10;
+    type DV = U4;
 
     const T_HAT_LEN: usize = 749;
     const MSB_BITMASK: u8 = 0b1100_0000;
 }
 
 impl EncodingSize for ml_kem::MlKem768 {
-    const K: usize = 3;
-    const DU: usize = 10;
-    const DV: usize = 4;
+    type USIZE = U12;
+    type K = U3;
+    type DU = U10;
+    type DV = U4;
 
     const T_HAT_LEN: usize = 1124;
     const MSB_BITMASK: u8 = 0b1111_1100;
 }
 
 impl EncodingSize for ml_kem::MlKem1024 {
-    const K: usize = 4;
-    const DU: usize = 11;
-    const DV: usize = 5;
+    type USIZE = U12;
+    type K = U4;
+    type DU = U11;
+    type DV = U5;
 
     const T_HAT_LEN: usize = 1498;
     const MSB_BITMASK: u8 = 0b1110_0000;
