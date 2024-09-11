@@ -75,7 +75,7 @@ where
     #[must_use]
     /// Construct a local object representing an Encapsulation key from the FIPS byte
     /// representations of the individual parts of the key.
-    pub fn from_parts(t_hat: &[[u16; ARR_LEN]; P::K], rho: &[u8; 32], mask_byte: u8) -> Self {
+    pub fn from_parts(t_hat: &[[u16; ARR_LEN::USIZE]; P::K::USIZE], rho: &[u8; 32], mask_byte: u8) -> Self {
         let ek_fb = fips::ek_encode(rho, t_hat);
         Self::from_fips_bytes(ek_fb, mask_byte)
     }

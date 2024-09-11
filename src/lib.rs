@@ -9,7 +9,7 @@
 #![doc = include_str!("../README.md")]
 
 use core::fmt::Debug;
-use core::ops::{Add, Div, Mul, Rem, Sub};
+use core::ops::{Add, Mul};
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
@@ -24,9 +24,8 @@ pub use kemeleon::*;
 
 use hybrid_array::{
     typenum::{
-        operator_aliases::{Gcf, Prod, Quot, Sum},
-        type_operators::Gcd,
-        Const, ToUInt, U0, U12, U16, U2, U256, U3, U32, U384, U4, U6, U64, U8,
+        operator_aliases::{Prod, Sum},
+        U12, U2, U256, U3, U32, U384, U4,
     },
     Array, ArraySize,
 };
@@ -58,11 +57,13 @@ impl From<u16> for FieldElement {
     }
 }
 
+#[allow(non_camel_case_types)]
 type ARR_LEN = U256;
+#[allow(non_camel_case_types)]
 type RHO_LEN = U32;
 
 /// byte array
-type Barr8<const N: usize> = [u8; N];
+type ByteArray<N: ArraySize> = Array<u8, N>;
 /// value array -- array of polynomial values
 type ValueArray<P: EncodingSize> = Array<Array<u16, ARR_LEN>, P::K>;
 type NttArray<P: EncodingSize> = ValueArray<P>;
@@ -104,9 +105,10 @@ pub trait Transcode {
 /// HIGH\\\_ORDER\\\_BIT = \left\lceil log_{2}(q^{n\cdot k}+1) - 1 \right\rceil
 /// $$
 ///
+#[allow(non_camel_case_types)]
 pub trait EncodingSize {
     /// Number of bits used to represent field elements
-    type USIZE;
+    type USIZE: ArraySize;
 
     /// Number of field elements per equation.
     type K: ArraySize;
@@ -131,15 +133,9 @@ pub trait EncodingSize {
     const MSB_BITMASK_INV: u8 = !Self::MSB_BITMASK;
 }
 
-pub trait KemeleonEncodingSize: EncodingSize
-where
-    <Self::ENCODED_USIZE as Add<Self::ENCODED_VSIZE>>::Output: ArraySize
-{
-    /// Size of the Kemeleon encoded string as bytes.
-    ///
-    /// Computed as: $T\\_HAT\\_LEN + RHO\\_LEN$
-    type ENCODED_SIZE: ArraySize;
-
+///
+#[allow(non_camel_case_types)]
+pub trait KemeleonEncodingSize: EncodingSize {
     /// Size of the U value of the kemeleon encoded ciphertext. Matches `T_HAT_LEN`.
     type ENCODED_USIZE: ArraySize + Add<Self::ENCODED_VSIZE>;
     #[allow(clippy::doc_markdown)]
@@ -152,17 +148,12 @@ where
 
 impl<T: EncodingSize> KemeleonEncodingSize for T
 where
-    <T as EncodingSize>::T_HAT_LEN: Add<RHO_LEN>,
-    <<T as EncodingSize>::T_HAT_LEN as Add<RHO_LEN>>::Output: ArraySize,
-
     <T as EncodingSize>::DV: Mul<U32>,
     <<T as EncodingSize>::DV as Mul<U32>>::Output: ArraySize,
-{
-    /// Size of the Kemeleon encoded string as bytes.
-    ///
-    /// Computed as: $T\\_HAT\\_LEN + RHO\\_LEN$
-    type ENCODED_SIZE = Sum<Self::T_HAT_LEN, RHO_LEN>;
 
+    <T as EncodingSize>::T_HAT_LEN: Add<<<T as EncodingSize>::DV as Mul<U32>>::Output>,
+    <<T as EncodingSize>::T_HAT_LEN as Add<<<T as EncodingSize>::DV as Mul<U32>>::Output>>::Output: ArraySize,
+{
     /// Size of the U value of the kemeleon encoded ciphertext. Matches `T_HAT_LEN`.
     type ENCODED_USIZE = T::T_HAT_LEN;
 
@@ -170,12 +161,11 @@ where
     /// Size of the V value of the Kemeleon encoded ciphertext. N values of Dv Bit size.
     /// The number of bytes is computed as $ ENCODED_VSIZE = n * D_v / 8 \text{ --- for } n=256 $
     type ENCODED_VSIZE = Prod<Self::DV, U32>;
-    // /// Size of the combined kemeleon encoded ciphertext.
-    // type ENCODED_CT_SIZE = Sum<Self::ENCODED_USIZE, Self::ENCODED_VSIZE>;
 }
 
 
 /// Fips encoding size values
+#[allow(non_camel_case_types)]
 pub trait FipsEncodingSize: EncodingSize {
     /// Length of an NTT Vector encoded and compressed
     type FIPS_T_HAT_LEN: ArraySize;
@@ -198,6 +188,8 @@ where
     <T as EncodingSize>::K: Mul<<T as EncodingSize>::DU>,
     <<T as EncodingSize>::K as Mul<<T as EncodingSize>::DU>>::Output: ArraySize,
 
+    <<T as EncodingSize>::K as Mul<<T as EncodingSize>::DU>>::Output: Mul<U32>,
+    <<<T as EncodingSize>::K as Mul<<T as EncodingSize>::DU>>::Output as Mul<U32>>::Output: ArraySize,
 {
     /// Length of an NTT Vector encoded and compressed K * 12 * (256/8) = K * 384
     type FIPS_T_HAT_LEN = Prod<Self::K, U384>;
@@ -208,7 +200,10 @@ where
     type FIPS_ENCODED_VSIZE = Prod<T::DV, U32>;
 }
 
-trait ByteArraySize {
+
+/// Lengths associated with the FIPS ML-KEM encoding of Encapsulation Keys and Ciphertexts.
+#[allow(non_camel_case_types)]
+pub trait FipsByteArraySize: FipsEncodingSize {
     /// Length of an encoded encapsulation key
     type ENCODED_EK_SIZE: ArraySize;
 
@@ -216,7 +211,20 @@ trait ByteArraySize {
     type ENCODED_CT_SIZE: ArraySize;
 }
 
-impl<T: FipsEncodingSize> ByteArraySize for T
+/// Lengths associated with the Kemeleon ML-KEM encoding of Encapsulation Keys and Ciphertexts.
+#[allow(non_camel_case_types)]
+pub trait KemeleonByteArraySize: KemeleonEncodingSize {
+    /// Length of a Kemeleon encoded encapsulation key as bytes.
+    ///
+    /// Computed as: $T\\_HAT\\_LEN + RHO\\_LEN$
+    type ENCODED_EK_SIZE: ArraySize;
+
+    /// Size of a ciphertext encoded and compressed.
+    type ENCODED_CT_SIZE: ArraySize;
+}
+
+
+impl<T: FipsEncodingSize> FipsByteArraySize for T
 where
     <T as FipsEncodingSize>::FIPS_ENCODED_USIZE: Add<<T as FipsEncodingSize>::FIPS_ENCODED_VSIZE>,
     <<T as FipsEncodingSize>::FIPS_ENCODED_USIZE as Add<<T as FipsEncodingSize>::FIPS_ENCODED_VSIZE>>::Output: ArraySize,
@@ -225,20 +233,21 @@ where
     <<T as FipsEncodingSize>::FIPS_T_HAT_LEN as Add<RHO_LEN>>::Output: ArraySize,
 {
     type ENCODED_EK_SIZE = Sum<T::FIPS_T_HAT_LEN, RHO_LEN>;
-    
+
     type ENCODED_CT_SIZE = Sum<T::FIPS_ENCODED_USIZE, T::FIPS_ENCODED_VSIZE>;
 }
 
-impl<T: KemeleonEncodingSize> ByteArraySize for T
+impl<T: KemeleonEncodingSize> KemeleonByteArraySize for T
 where
     <T as KemeleonEncodingSize>::ENCODED_USIZE: Add<<T as KemeleonEncodingSize>::ENCODED_VSIZE>,
     <<T as KemeleonEncodingSize>::ENCODED_USIZE as Add<<T as KemeleonEncodingSize>::ENCODED_VSIZE>>::Output: ArraySize,
 
-    <T as KemeleonEncodingSize>::T_HAT_LEN: Add<RHO_LEN>,
-    <<T as KemeleonEncodingSize>::T_HAT_LEN as Add<RHO_LEN>>::Output: ArraySize,
+    <T as EncodingSize>::T_HAT_LEN: Add<RHO_LEN>,
+    <<T as EncodingSize>::T_HAT_LEN as Add<RHO_LEN>>::Output: ArraySize,
+
 {
     type ENCODED_EK_SIZE = Sum<T::T_HAT_LEN, RHO_LEN>;
-    
+
     type ENCODED_CT_SIZE = Sum<T::ENCODED_USIZE, T::ENCODED_VSIZE>;
 }
 

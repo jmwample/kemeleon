@@ -13,6 +13,9 @@
   <a href="https://doc.rust-lang.org/1.6.0/complement-project-faq.html#why-dual-mitasl2-license">
     <img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-blue" alt="License: MIT/Apache 2.0">
   </a>
+  <a href="https://github.com/jmwample/kemeleon#minimum-supported-rust-version-msrv">
+    <img src="https://img.shields.io/badge/MSRV-1.74+-blue.svg" alt="MSRV 1.74">
+  </a>
 </p>
 
 This crates implements the kemeleon algorithms for secure obfuscation of ML-KEM

@@ -18,7 +18,7 @@ alloc = []
 num-bigint = "0.4.6"
 rand = "0.8.5"
 ml-kem = { version="0.2.1" }
-hybrid-array = {version  = "0.2.0-rc.9", features=["extra-sizes"], git="https://github.com/RustCrypto/hybrid-array.git" }
+hybrid-array = {version  = "0.2.0-rc.9", features=["extra-sizes"], path = "/home/jmwample/svc/RustCrypto/hybrid-array" }# git="https://github.com/RustCrypto/hybrid-array.git" }
 rand_core = "0.6.4"
 kem = "0.3.0-pre.0"
 lazy_static = "1.5.0"
