@@ -23,9 +23,10 @@ pub use errors::*;
 pub use kemeleon::*;
 
 use hybrid_array::{
+    sizes::{U1124, U1498, U749},
     typenum::{
         operator_aliases::{Prod, Sum},
-        U12, U2, U256, U3, U32, U384, U4,
+        U10, U11, U12, U2, U256, U3, U32, U384, U4, U5,
     },
     Array, ArraySize,
 };
@@ -137,13 +138,11 @@ pub trait EncodingSize {
 #[allow(non_camel_case_types)]
 pub trait KemeleonEncodingSize: EncodingSize {
     /// Size of the U value of the kemeleon encoded ciphertext. Matches `T_HAT_LEN`.
-    type ENCODED_USIZE: ArraySize + Add<Self::ENCODED_VSIZE>;
+    type ENCODED_USIZE: ArraySize;
     #[allow(clippy::doc_markdown)]
     /// Size of the V value of the Kemeleon encoded ciphertext. N values of Dv Bit size.
     /// The number of bytes is computed as $ ENCODED_VSIZE = n * D_v / 8 \text{ --- for } n=256 $
     type ENCODED_VSIZE: ArraySize;
-    // /// Size of the combined kemeleon encoded ciphertext.
-    // type ENCODED_CT_SIZE: ArraySize;
 }
 
 impl<T: EncodingSize> KemeleonEncodingSize for T
@@ -152,17 +151,12 @@ where
     <<T as EncodingSize>::DV as Mul<U32>>::Output: ArraySize,
 
     <T as EncodingSize>::T_HAT_LEN: Add<<<T as EncodingSize>::DV as Mul<U32>>::Output>,
-    <<T as EncodingSize>::T_HAT_LEN as Add<<<T as EncodingSize>::DV as Mul<U32>>::Output>>::Output: ArraySize,
+    <<T as EncodingSize>::T_HAT_LEN as Add<<<T as EncodingSize>::DV as Mul<U32>>::Output>>::Output:
+        ArraySize,
 {
-    /// Size of the U value of the kemeleon encoded ciphertext. Matches `T_HAT_LEN`.
     type ENCODED_USIZE = T::T_HAT_LEN;
-
-    #[allow(clippy::doc_markdown)]
-    /// Size of the V value of the Kemeleon encoded ciphertext. N values of Dv Bit size.
-    /// The number of bytes is computed as $ ENCODED_VSIZE = n * D_v / 8 \text{ --- for } n=256 $
     type ENCODED_VSIZE = Prod<Self::DV, U32>;
 }
-
 
 /// Fips encoding size values
 #[allow(non_camel_case_types)]
@@ -176,7 +170,6 @@ pub trait FipsEncodingSize: EncodingSize {
     type FIPS_ENCODED_VSIZE: ArraySize;
 }
 
-
 impl<T: EncodingSize> FipsEncodingSize for T
 where
     <T as EncodingSize>::K: Mul<U384>,
@@ -189,17 +182,13 @@ where
     <<T as EncodingSize>::K as Mul<<T as EncodingSize>::DU>>::Output: ArraySize,
 
     <<T as EncodingSize>::K as Mul<<T as EncodingSize>::DU>>::Output: Mul<U32>,
-    <<<T as EncodingSize>::K as Mul<<T as EncodingSize>::DU>>::Output as Mul<U32>>::Output: ArraySize,
+    <<<T as EncodingSize>::K as Mul<<T as EncodingSize>::DU>>::Output as Mul<U32>>::Output:
+        ArraySize,
 {
-    /// Length of an NTT Vector encoded and compressed K * 12 * (256/8) = K * 384
     type FIPS_T_HAT_LEN = Prod<Self::K, U384>;
-
-    /// Size of the compressed U element of an ML-KEM ciphertext. $Du * K * 256 / 8$
     type FIPS_ENCODED_USIZE = Prod<Prod<T::K, T::DU>, U32>;
-    /// Size of the compressed V element of an ML-KEM ciphertext. $Dv * 256 / 8$
     type FIPS_ENCODED_VSIZE = Prod<T::DV, U32>;
 }
-
 
 /// Lengths associated with the FIPS ML-KEM encoding of Encapsulation Keys and Ciphertexts.
 #[allow(non_camel_case_types)]
@@ -223,36 +212,33 @@ pub trait KemeleonByteArraySize: KemeleonEncodingSize {
     type ENCODED_CT_SIZE: ArraySize;
 }
 
-
 impl<T: FipsEncodingSize> FipsByteArraySize for T
 where
     <T as FipsEncodingSize>::FIPS_ENCODED_USIZE: Add<<T as FipsEncodingSize>::FIPS_ENCODED_VSIZE>,
-    <<T as FipsEncodingSize>::FIPS_ENCODED_USIZE as Add<<T as FipsEncodingSize>::FIPS_ENCODED_VSIZE>>::Output: ArraySize,
+    <<T as FipsEncodingSize>::FIPS_ENCODED_USIZE as Add<
+        <T as FipsEncodingSize>::FIPS_ENCODED_VSIZE,
+    >>::Output: ArraySize,
 
     <T as FipsEncodingSize>::FIPS_T_HAT_LEN: Add<RHO_LEN>,
     <<T as FipsEncodingSize>::FIPS_T_HAT_LEN as Add<RHO_LEN>>::Output: ArraySize,
 {
     type ENCODED_EK_SIZE = Sum<T::FIPS_T_HAT_LEN, RHO_LEN>;
-
     type ENCODED_CT_SIZE = Sum<T::FIPS_ENCODED_USIZE, T::FIPS_ENCODED_VSIZE>;
 }
 
 impl<T: KemeleonEncodingSize> KemeleonByteArraySize for T
 where
     <T as KemeleonEncodingSize>::ENCODED_USIZE: Add<<T as KemeleonEncodingSize>::ENCODED_VSIZE>,
-    <<T as KemeleonEncodingSize>::ENCODED_USIZE as Add<<T as KemeleonEncodingSize>::ENCODED_VSIZE>>::Output: ArraySize,
+    <<T as KemeleonEncodingSize>::ENCODED_USIZE as Add<
+        <T as KemeleonEncodingSize>::ENCODED_VSIZE,
+    >>::Output: ArraySize,
 
     <T as EncodingSize>::T_HAT_LEN: Add<RHO_LEN>,
     <<T as EncodingSize>::T_HAT_LEN as Add<RHO_LEN>>::Output: ArraySize,
-
 {
     type ENCODED_EK_SIZE = Sum<T::T_HAT_LEN, RHO_LEN>;
-
     type ENCODED_CT_SIZE = Sum<T::ENCODED_USIZE, T::ENCODED_VSIZE>;
 }
-
-
-use hybrid_array::{typenum::{U5, U10, U11, }, sizes::{U749, U1124, U1498}};
 
 impl EncodingSize for ml_kem::MlKem512 {
     type USIZE = U12;
@@ -300,7 +286,7 @@ pub type MlKem1024 = mlkem::Kemx<ml_kem::MlKem1024>;
 impl<P> EncodingSize for mlkem::Kemx<P>
 where
     P: ml_kem::KemCore + EncodingSize,
-{
+{ //_1011_1001_0100
     type USIZE = P::USIZE;
     type K = P::K;
     type DU = P::DU;

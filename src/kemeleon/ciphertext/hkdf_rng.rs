@@ -36,6 +36,7 @@ where
 {
     private_buf: [u8; MAX_FILL],
     count: usize,
+    _digest: core::marker::PhantomData<D>,
 }
 
 #[allow(dead_code)]
@@ -64,6 +65,7 @@ where
         Self {
             private_buf: buf,
             count: 0,
+            _digest: core::marker::PhantomData{},
         }
     }
 
