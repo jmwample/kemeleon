@@ -100,8 +100,8 @@ impl<'a> Compress for IterMut<'a, u16> {
 #[cfg(test)]
 pub(crate) mod test {
     use super::*;
+    use hybrid_array::typenum::{U1, U10, U11, U12, U4, U5, U6};
     use num_rational::Ratio;
-    use hybrid_array::typenum::{U1, U4, U5, U6, U10, U11, U12};
 
     fn rational_compress<D: CompressionFactor>(input: u16) -> u16 {
         let fraction = Ratio::new(u32::from(input) * (1 << D::USIZE), FieldElement::Q32);

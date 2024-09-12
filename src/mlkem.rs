@@ -1,11 +1,11 @@
 use crate::{
     fips, kemeleon::Encodable, Encode, EncodeError, EncodingSize, FipsByteArraySize,
-    FipsEncodingSize, KemeleonByteArraySize, NttArray, Transcode, ARR_LEN,
+    FipsEncodingSize, KemeleonByteArraySize, NttArray, Transcode,
 };
 
 use core::{fmt::Debug, marker::PhantomData};
 
-use hybrid_array::{typenum::Unsigned, Array};
+use hybrid_array::Array;
 use kem::{Decapsulate, Encapsulate};
 use ml_kem::{Ciphertext, Encoded, EncodedSizeUser, KemCore, SharedKey};
 #[cfg(feature = "deterministic")]
@@ -29,7 +29,7 @@ where
 
 impl<P> Kemx<P>
 where
-    P: ml_kem::KemCore + FipsByteArraySize,
+    P: ml_kem::KemCore + FipsByteArraySize + KemeleonByteArraySize,
 {
     pub fn generate(rng: &mut impl CryptoRngCore) -> (KDecapsulationKey<P>, KEncapsulationKey<P>) {
         // random u8 for the most significant byte which will be less than 8 bits.
@@ -78,9 +78,8 @@ where
     #[must_use]
     /// Construct a local object representing an Encapsulation key from the FIPS byte
     /// representations of the individual parts of the key.
-    pub fn from_parts(t_hat: &[[u16; ARR_LEN::USIZE]], rho: &[u8; 32], mask_byte: u8) -> Self {
-        let ntt: NttArray<P> = Array::from_fn(|i| Array(t_hat[i]));
-        let ek_fb = fips::ek_encode::<P>(rho, &ntt);
+    pub fn from_parts(ntt: &NttArray<P>, rho: &[u8; 32], mask_byte: u8) -> Self {
+        let ek_fb = fips::ek_encode::<P>(rho, ntt);
         Self::from_fips_bytes(ek_fb, mask_byte)
     }
 
@@ -136,7 +135,7 @@ where
 #[cfg(feature = "deterministic")]
 impl<P> EncapsulateDeterministic<KEncodedCiphertext<P>, SharedKey<P>> for KEncapsulationKey<P>
 where
-    P: KemCore + FipsByteArraySize,
+    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
 {
     type Error = EncodeError;
 
@@ -264,7 +263,7 @@ where
 
 impl<P> Decapsulate<KEncodedCiphertext<P>, SharedKey<P>> for KDecapsulationKey<P>
 where
-    P: KemCore +  FipsByteArraySize + KemeleonByteArraySize,
+    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
 {
     type Error = EncodeError;
 
@@ -402,8 +401,7 @@ mod test {
         let k_recv = dk.decapsulate(&ct_fips).expect("failed to decapsulate");
         assert_eq!(sk, k_recv);
 
-        let mut ct_arr =
-            ByteArr::zero::<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>();
+        let mut ct_arr = ByteArr::zero::<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>();
         ct_arr.copy_from_slice(&ct.as_bytes());
 
         // KCiphertext try_from &[u8]

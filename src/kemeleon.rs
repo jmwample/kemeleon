@@ -12,9 +12,9 @@ use crate::{EncodeError, EncodingSize, FieldElement};
 
 use core::cmp::min;
 
+use hybrid_array::typenum::Unsigned;
 use ml_kem::KemCore;
 use num_bigint::BigUint;
-use hybrid_array::typenum::Unsigned;
 
 mod ciphertext;
 mod encapsulation_key;

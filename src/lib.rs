@@ -26,7 +26,7 @@ use hybrid_array::{
     sizes::{U1124, U1498, U749},
     typenum::{
         operator_aliases::{Prod, Sum},
-        Unsigned, U10, U11, U12, U2, U256, U3, U32, U384, U4, U5,
+        U10, U11, U12, U2, U256, U3, U32, U384, U4, U5,
     },
     Array, ArraySize,
 };
@@ -60,15 +60,13 @@ impl From<u16> for FieldElement {
 
 #[allow(non_camel_case_types)]
 type ARR_LEN = U256;
-const ARR_LEN_U: usize = ARR_LEN::USIZE;
 #[allow(non_camel_case_types)]
 type RHO_LEN = U32;
 
 /// byte array
-type ByteArray<N: ArraySize> = Array<u8, N>;
+type ByteArray<N> = Array<u8, N>;
 /// value array -- array of polynomial values
-type ValueArray<P: EncodingSize> = Array<Array<u16, ARR_LEN>, P::K>;
-type NttArray<P: EncodingSize> = ValueArray<P>;
+type NttArray<P> = Array<Array<u16, ARR_LEN>, <P as EncodingSize>::K>;
 struct Ntt;
 
 impl Ntt {
@@ -84,12 +82,6 @@ impl ByteArr {
         ByteArray::<N>::from_fn(|_| 0u8)
     }
 }
-
-trait Init {
-    fn zero() -> Self;
-}
-
-
 
 #[allow(dead_code)]
 impl FieldElement {
@@ -171,10 +163,6 @@ impl<T: EncodingSize> KemeleonEncodingSize for T
 where
     <T as EncodingSize>::DV: Mul<U32>,
     <<T as EncodingSize>::DV as Mul<U32>>::Output: ArraySize,
-
-    <T as EncodingSize>::T_HAT_LEN: Add<<<T as EncodingSize>::DV as Mul<U32>>::Output>,
-    <<T as EncodingSize>::T_HAT_LEN as Add<<<T as EncodingSize>::DV as Mul<U32>>::Output>>::Output:
-        ArraySize,
 {
     type ENCODED_USIZE = T::T_HAT_LEN;
     type ENCODED_VSIZE = Prod<Self::DV, U32>;
@@ -308,7 +296,8 @@ pub type MlKem1024 = mlkem::Kemx<ml_kem::MlKem1024>;
 impl<P> EncodingSize for mlkem::Kemx<P>
 where
     P: ml_kem::KemCore + EncodingSize,
-{ //_1011_1001_0100
+{
+    //_1011_1001_0100
     type USIZE = P::USIZE;
     type K = P::K;
     type DU = P::DU;

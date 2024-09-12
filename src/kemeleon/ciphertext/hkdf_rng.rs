@@ -65,7 +65,7 @@ where
         Self {
             private_buf: buf,
             count: 0,
-            _digest: core::marker::PhantomData{},
+            _digest: core::marker::PhantomData {},
         }
     }
 

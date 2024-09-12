@@ -1,6 +1,7 @@
 use super::{vector_decode, vector_encode, Encode};
 use crate::{
-    fips, ByteArr, ByteArray, EncodeError, FieldElement, FipsByteArraySize, FipsEncodingSize, KemeleonByteArraySize, KemeleonEncodingSize, Ntt
+    fips, ByteArr, ByteArray, EncodeError, FieldElement, FipsByteArraySize, FipsEncodingSize,
+    KemeleonByteArraySize, KemeleonEncodingSize, Ntt,
 };
 
 use hybrid_array::ArraySize;
@@ -188,12 +189,9 @@ fn split_ct<P>(b: &[u8]) -> (&[u8], &[u8])
 where
     P: KemeleonByteArraySize,
 {
-        let ct_len = <P as KemeleonByteArraySize>::ENCODED_CT_SIZE::USIZE;
-        let u_len = <P as KemeleonEncodingSize>::ENCODED_USIZE::USIZE;
-    (
-        &(b[..u_len]),
-        &(b[u_len..ct_len]),
-    )
+    let ct_len = <P as KemeleonByteArraySize>::ENCODED_CT_SIZE::USIZE;
+    let u_len = <P as KemeleonEncodingSize>::ENCODED_USIZE::USIZE;
+    (&(b[..u_len]), &(b[u_len..ct_len]))
 }
 
 fn concat_ct<P>(u: &[u8], v: &[u8]) -> ByteArray<P::ENCODED_CT_SIZE>
@@ -233,8 +231,8 @@ mod test {
         // encapsulate a secret using the kemeleon Encapsulation key
         let (mut ct, mut k_send) = ek.key.encapsulate(&mut rng).unwrap();
         // attempt to encode the ciphertext to kemeleon representation
-        let (mut encodable, mut kemeleon_ct) =
-            KCiphertext::<MlKem512>::new_from_rng(&ct, &mut rng).expect("failed to make new ciphertext");
+        let (mut encodable, mut kemeleon_ct) = KCiphertext::<MlKem512>::new_from_rng(&ct, &mut rng)
+            .expect("failed to make new ciphertext");
 
         let mut i = 0;
         while !encodable && i < MAX_RETRIES {
