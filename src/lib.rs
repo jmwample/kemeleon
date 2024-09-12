@@ -26,7 +26,7 @@ use hybrid_array::{
     sizes::{U1124, U1498, U749},
     typenum::{
         operator_aliases::{Prod, Sum},
-        U10, U11, U12, U2, U256, U3, U32, U384, U4, U5,
+        Unsigned, U10, U11, U12, U2, U256, U3, U32, U384, U4, U5,
     },
     Array, ArraySize,
 };
@@ -60,6 +60,7 @@ impl From<u16> for FieldElement {
 
 #[allow(non_camel_case_types)]
 type ARR_LEN = U256;
+const ARR_LEN_U: usize = ARR_LEN::USIZE;
 #[allow(non_camel_case_types)]
 type RHO_LEN = U32;
 
@@ -68,6 +69,27 @@ type ByteArray<N: ArraySize> = Array<u8, N>;
 /// value array -- array of polynomial values
 type ValueArray<P: EncodingSize> = Array<Array<u16, ARR_LEN>, P::K>;
 type NttArray<P: EncodingSize> = ValueArray<P>;
+struct Ntt;
+
+impl Ntt {
+    fn zero<P: EncodingSize>() -> NttArray<P> {
+        Array::<Array<u16, ARR_LEN>, P::K>::from_fn(|_| Array::<u16, ARR_LEN>::from_fn(|_| 0u16))
+    }
+}
+
+struct ByteArr;
+
+impl ByteArr {
+    fn zero<N: ArraySize>() -> ByteArray<N> {
+        ByteArray::<N>::from_fn(|_| 0u8)
+    }
+}
+
+trait Init {
+    fn zero() -> Self;
+}
+
+
 
 #[allow(dead_code)]
 impl FieldElement {

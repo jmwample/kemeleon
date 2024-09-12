@@ -1,6 +1,7 @@
 use super::{vector_decode, vector_encode, Encode};
-use crate::{fips, FieldElement, KemeleonEncodingSize};
-use crate::{ByteArray, EncodeError, EncodingSize, FipsByteArraySize, KemeleonByteArraySize, ARR_LEN};
+use crate::{
+    fips, ByteArr, ByteArray, EncodeError, FieldElement, FipsByteArraySize, FipsEncodingSize, KemeleonByteArraySize, KemeleonEncodingSize, Ntt
+};
 
 use hybrid_array::ArraySize;
 use ml_kem::KemCore;
@@ -35,7 +36,7 @@ where
     type Error = EncodeError;
 
     fn as_bytes(&self) -> Self::ET {
-        self.0
+        self.0.clone()
     }
 
     fn try_from_bytes(b: impl AsRef<[u8]>) -> Result<Self, Self::Error> {
@@ -66,7 +67,7 @@ where
     ) -> Result<(bool, Self), EncodeError> {
         let mut kemeleon_ct = Self {
             encoded: false,
-            bytes: ByteArray::<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>::from_fn(|_| 0u8),
+            bytes: ByteArr::zero::<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>(),
             fips: fips_ct.clone(),
         };
 
@@ -85,7 +86,7 @@ where
     ) -> Result<(bool, Self), EncodeError> {
         let mut kemeleon_ct = Self {
             encoded: false,
-            bytes: ByteArray::<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>::from_fn(|_| 0u8),
+            bytes: ByteArr::zero::<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>(),
             fips: fips_ct.clone(),
         };
 
@@ -99,42 +100,42 @@ where
         let mut r1 = fips::byte_decode::<P>(&c1);
 
         // re-add randomness to the u elements
-        r1.as_flattened_mut()
-            .iter_mut()
-            .decompress::<P::DU>();
+        r1.as_flattened_mut().iter_mut().decompress::<P::DU>();
         for u_i in r1.as_flattened_mut().iter_mut() {
             *u_i = recover_rand::<P::DU>(*u_i, rng);
         }
 
         // encode the u elements
-        let mut dst = ByteArray::<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>::from_fn(|_| 0u8);
-        let mut success = vector_encode(r1.as_flattened(), &mut dst)?;
+        let mut dst = ByteArr::zero::<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>();
+        let mut success = vector_encode::<P>(r1.as_flattened(), &mut dst)?;
 
         // Check c2 for 0s and rejection sample based on probability
         success &= rejection_sample(c2, rng, P::DV::USIZE);
 
-        self.bytes = concat_ct(&dst, c2);
+        self.bytes = concat_ct::<P>(&dst, c2);
         Ok(success)
     }
 
     pub(crate) fn decode(c: impl AsRef<[u8]>) -> Result<Self, EncodeError> {
-        let mut ct_bytes = [0u8; P::ENCODED_CT_SIZE];
-        ct_bytes[..].copy_from_slice(&c.as_ref()[..P::ENCODED_CT_SIZE]);
+        let fips_u_len = <P as FipsEncodingSize>::FIPS_ENCODED_USIZE::USIZE;
+        let ct_in = &c.as_ref();
+        let ct_bytes =
+            ByteArray::<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>::from_fn(|i| ct_in[i]);
         let (c1, c2) = split_ct::<P>(&ct_bytes);
 
-        let mut values = [[0u16; ARR_LEN]; P::K];
+        let mut values = Ntt::zero::<P>();
         vector_decode::<P>(&c1, values.as_flattened_mut())?;
 
         // re-compress the values
         let c1 = values.as_flattened_mut();
-        c1.iter_mut().compress::<Du<{ P::DU }>>();
+        c1.iter_mut().compress::<P::DU>();
 
         // convert back to fips encoding of the U values
-        let mut fips_ct = [0u8; P::FIPS_ENCODED_CT_SIZE];
-        fips::byte_encode::<P, { P::DU }>(&values, &mut fips_ct[..P::FIPS_ENCODED_USIZE]);
+        let mut fips_ct = ByteArr::zero::<<P as FipsByteArraySize>::ENCODED_CT_SIZE>();
+        fips::byte_encode::<P>(&values, &mut fips_ct[..fips_u_len]);
 
         // ml_kem::Ciphertext = c1 || c2
-        fips_ct[P::FIPS_ENCODED_USIZE..].copy_from_slice(c2);
+        fips_ct[fips_u_len..].copy_from_slice(c2);
         let fips =
             ml_kem::Ciphertext::<P>::try_from(&fips_ct[..]).map_err(EncodeError::MlKemError)?;
 
@@ -185,11 +186,13 @@ where
 
 fn split_ct<P>(b: &[u8]) -> (&[u8], &[u8])
 where
-    P: KemeleonEncodingSize,
+    P: KemeleonByteArraySize,
 {
+        let ct_len = <P as KemeleonByteArraySize>::ENCODED_CT_SIZE::USIZE;
+        let u_len = <P as KemeleonEncodingSize>::ENCODED_USIZE::USIZE;
     (
-        &(b[..P::ENCODED_USIZE::USIZE]),
-        &(b[P::ENCODED_USIZE::USIZE..P::ENCODED_CT_SIZE::USIZE]),
+        &(b[..u_len]),
+        &(b[u_len..ct_len]),
     )
 }
 
@@ -197,9 +200,13 @@ fn concat_ct<P>(u: &[u8], v: &[u8]) -> ByteArray<P::ENCODED_CT_SIZE>
 where
     P: KemeleonByteArraySize,
 {
-    let mut out = [0u8; P::ENCODED_CT_SIZE];
-    out[..P::ENCODED_USIZE].copy_from_slice(&u[..P::ENCODED_USIZE]);
-    out[P::ENCODED_USIZE..P::ENCODED_CT_SIZE].copy_from_slice(&v[..P::ENCODED_VSIZE]);
+    let ct_len = <P as KemeleonByteArraySize>::ENCODED_CT_SIZE::USIZE;
+    let u_len = <P as KemeleonEncodingSize>::ENCODED_USIZE::USIZE;
+    let v_len = <P as KemeleonEncodingSize>::ENCODED_VSIZE::USIZE;
+
+    let mut out = ByteArr::zero::<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>();
+    out[..u_len].copy_from_slice(&u[..u_len]);
+    out[u_len..ct_len].copy_from_slice(&v[..v_len]);
     out
 }
 
@@ -227,7 +234,7 @@ mod test {
         let (mut ct, mut k_send) = ek.key.encapsulate(&mut rng).unwrap();
         // attempt to encode the ciphertext to kemeleon representation
         let (mut encodable, mut kemeleon_ct) =
-            KCiphertext::new_from_rng(&ct, &mut rng).expect("failed to make new ciphertext");
+            KCiphertext::<MlKem512>::new_from_rng(&ct, &mut rng).expect("failed to make new ciphertext");
 
         let mut i = 0;
         while !encodable && i < MAX_RETRIES {
