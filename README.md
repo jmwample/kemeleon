@@ -33,6 +33,12 @@ The implementation contained in this crate has never been independently audited!
 <h4><b>USE AT YOUR OWN RISK!</b></h4>
 </center>
 
+
+🚧  UNDER CONSTRUCTION  🚧
+This library is in a devloping (non-stable) condition, meaning that things will likely change. This includes
+API, interface, algorithms, etc. -- Feedback is welcome, but we do not guarantee support for any features /
+interface as currently implemented.
+
 ## Usage
 
 ```rust ignore
@@ -94,16 +100,22 @@ Core features
 - [x] Modify implementation to be `no-std` compatible
   - [x] Swap from custom error to &str error just for simplicity (`core::error::Error` is too new)
 - [x] GH actions for testing, building, linting, etc.
-- [ ] Use [`generic_array`](https://docs.rs/generic-array/latest/generic_array/) for
+- [x] Use [`hybrid-array`](https://docs.rs/hybrid-array/0.2.0-rc.9/hybrid_array/) for
   all type based generics requiring sized arrays
-  - [ ] Move const generics (`#![feature(generics_const_exprs)]`) to its own branch
+  - [x] Move const generics (`#![feature(generics_const_exprs)]`) to its own branch
     - const generics are an unstable feature, even though this is a very simple
       application of the feature it is bad practice to ask people use it in its current state.
-  - [ ] CI tests/builds for stable releases (const generics only work on nightly)
+  - [x] CI tests/builds for stable releases (const generics only work on nightly)
 - [ ] Nist vectors Integration tests
 
-Cleanup
+Cleanup -> Release 0.1.0-alpha
 
 - [ ] Polish public interface and docs for first release
 - [ ] Github actions release workflow
 
+Heading to Release 0.1.1-alpha
+
+- [ ] work up PR(s) for [ml-kem](https://docs.rs/ml-kem/latest/ml_kem/)
+  - [ ] expose internal things under a `dev` feature
+- [ ] remove as much repeated functionality as possible
+- [ ] revisit secure deterministic random byte generation

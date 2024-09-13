@@ -54,47 +54,47 @@ jobs:
     - name: Lint w/out Features
       run: cargo clippy --workspace --all-targets  --no-default-features --release
 
-#     bench:
-#       name: Check that benchmarks compile
-#       runs-on: ubuntu-latest
-#       steps:
-#       - uses: actions/checkout@v4
-#       - uses: dtolnay/rust-toolchain@stable
-#       - name: Build u32 bench
-#         env:
-#           RUSTFLAGS: '--cfg curve25519_dalek_bits="32"'
-#         run: cargo build --benches
-#       - name: Build u64 bench
-#         env:
-#           RUSTFLAGS: '--cfg curve25519_dalek_bits="64"'
-#         run: cargo build --benches
-#       - name: Build default (host native) bench
-#         run: cargo build --benches
+    bench:
+      name: Check that benchmarks compile
+      runs-on: ubuntu-latest
+      steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build u32 bench
+        env:
+          RUSTFLAGS: '--cfg curve25519_dalek_bits="32"'
+        run: cargo build --benches
+      - name: Build u64 bench
+        env:
+          RUSTFLAGS: '--cfg curve25519_dalek_bits="64"'
+        run: cargo build --benches
+      - name: Build default (host native) bench
+        run: cargo build --benches
 
-#   test-stable:
-#     name: Test 32/64 bit stable
-#     runs-on: ubuntu-latest
-#     strategy:
-#       matrix:
-#         include:
-#           # 32-bit target
-#           - target: i686-unknown-linux-gnu
-#             deps: >
-#               sudo dpkg --add-architecture i386;
-#               sudo touch /etc/apt/sources.list.d/i386-cross-compile-sources.list;
-#               echo "deb [arch=i386] http://ports.ubuntu.com/ focal universe\ndeb [arch=i386] http://ports.ubuntu.com/ focal-updates universe\n" | sudo tee -a /etc/apt/sources.list.d/i386-cross-compile-sources.list;
-#               sudo apt update && sudo apt install gcc-multilib libsqlite3-dev:i386
-#
-#           # 64-bit target
-#           - target: x86_64-unknown-linux-gnu
-#     steps:
-#     - uses: actions/checkout@v4
-#     - uses: dtolnay/rust-toolchain@stable
-#     - run: rustup target add ${{ matrix.target }}
-#     - run: ${{ matrix.deps }}
-#     - run: cargo test --target ${{ matrix.target }} --workspace --all-targets --all-features
-#   # - run: cargo test --target ${{ matrix.target }} --workspace --all-targets
-#   # - run: cargo test --target ${{ matrix.target }} --workspace --all-targets --no-default-features
+  test-stable:
+    name: Test 32/64 bit stable
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # 32-bit target
+          - target: i686-unknown-linux-gnu
+            deps: >
+              sudo dpkg --add-architecture i386;
+              sudo touch /etc/apt/sources.list.d/i386-cross-compile-sources.list;
+              echo "deb [arch=i386] http://ports.ubuntu.com/ focal universe\ndeb [arch=i386] http://ports.ubuntu.com/ focal-updates universe\n" | sudo tee -a /etc/apt/sources.list.d/i386-cross-compile-sources.list;
+              sudo apt update && sudo apt install gcc-multilib libsqlite3-dev:i386
+
+          # 64-bit target
+          - target: x86_64-unknown-linux-gnu
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+    - run: rustup target add ${{ matrix.target }}
+    - run: ${{ matrix.deps }}
+    - run: cargo test --target ${{ matrix.target }} --workspace --all-targets --all-features
+    - run: cargo test --target ${{ matrix.target }} --workspace --all-targets
+    - run: cargo test --target ${{ matrix.target }} --workspace --all-targets --no-default-features
 
   test-nightly:
     name: Test Nightly
@@ -104,20 +104,20 @@ jobs:
     - uses: dtolnay/rust-toolchain@nightly
     - run: cargo test --workspace --all-targets
 
-#   msrv:
-#     name: Check Crate against MSRV
-#     runs-on: ubuntu-latest
-#     steps:
-#     - uses: actions/checkout@v3
-#     # Re-resolve Cargo.lock with minimal versions
-#     - uses: dtolnay/rust-toolchain@nightly
-#     - run: cargo update -Z minimal-versions
-#     # Now check that `cargo build` works with respect to the oldest possible
-#     # deps and the stated MSRV. 1.74 should work
-#     - uses: dtolnay/rust-toolchain@1.74.0
-#     - run: cargo test --workspace --all-targets --all-features
-#     # Also make sure the AVX2 build works
-#     - run: cargo build --target x86_64-unknown-linux-gnu
+  msrv:
+    name: Check Crate against MSRV
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    # Re-resolve Cargo.lock with minimal versions
+    - uses: dtolnay/rust-toolchain@nightly
+    - run: cargo update -Z minimal-versions
+    # Now check that `cargo build` works with respect to the oldest possible
+    # deps and the stated MSRV. 1.74 should work
+    - uses: dtolnay/rust-toolchain@1.74.0
+    - run: cargo test --workspace --all-targets --all-features
+    # Also make sure the AVX2 build works
+    - run: cargo build --target x86_64-unknown-linux-gnu
 
   build:
     name: Build
