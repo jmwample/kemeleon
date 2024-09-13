@@ -230,6 +230,15 @@ where
     }
 }
 
+impl<P> From<&Array<u8, <P as KemeleonByteArraySize>::ENCODED_CT_SIZE>> for KCiphertext<P>
+where
+    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+{
+    fn from(value: &Array<u8, <P as KemeleonByteArraySize>::ENCODED_CT_SIZE>) -> Self {
+        KCiphertext::decode(value).unwrap()
+    }
+}
+
 impl<P> TryFrom<&[u8]> for KEncodedCiphertext<P>
 where
     P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
@@ -406,7 +415,9 @@ mod test {
 
         // KCiphertext try_from &[u8]
         let _ct = KCiphertext::<P>::try_from(&ct_arr[..]).expect("failed parse");
-        // KCiphertext from [u8; ENCODED_CT_SIZE]
+        // KCiphertext from Array<u8, ENCODED_CT_SIZE>
+        let _ct = KCiphertext::<P>::from(ct_arr.clone());
+        // KCiphertext from &Array<u8, ENCODED_CT_SIZE>
         let _ct = KCiphertext::<P>::from(&ct_arr);
         // KEncodedCiphertext try_from &[u8]
         let _ct = KEncodedCiphertext::<P>::try_from(&ct_arr[..]).expect("failed parse");

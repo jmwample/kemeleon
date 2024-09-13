@@ -231,8 +231,8 @@ mod test {
         // encapsulate a secret using the kemeleon Encapsulation key
         let (mut ct, mut k_send) = ek.key.encapsulate(&mut rng).unwrap();
         // attempt to encode the ciphertext to kemeleon representation
-        let (mut encodable, mut kemeleon_ct) = KCiphertext::<MlKem512>::new_from_rng(&ct, &mut rng)
-            .expect("failed to make new ciphertext");
+        let (mut encodable, mut kemeleon_ct) =
+            KCiphertext::<P>::new_from_rng(&ct, &mut rng).expect("failed to make new ciphertext");
 
         let mut i = 0;
         while !encodable && i < MAX_RETRIES {
@@ -257,7 +257,7 @@ mod test {
         let ct_bytes_recv = KEncodedCiphertext::try_from_bytes(ct_bytes)
             .unwrap_or_else(|e| panic!("{desc} failed to parse KEncodedCiphertext {e}"));
 
-        let ct_recv = KCiphertext::decode(&ct_bytes_recv)
+        let ct_recv = KCiphertext::<P>::decode(&ct_bytes_recv)
             .unwrap_or_else(|e| panic!("{desc}: failed decode {e}"));
         assert_eq!(ct_recv.fips, ct, "{desc}: fips ciphertexts don't match");
 

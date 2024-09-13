@@ -142,7 +142,7 @@ mod tests {
         P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
     {
         let ek_kb =
-            ByteArray::<<P as KemeleonByteArraySize>::ENCODED_EK_SIZE>::from_fn(|_| 0xff_0u8);
+            ByteArray::<<P as KemeleonByteArraySize>::ENCODED_EK_SIZE>::from_fn(|_| 0xff_u8);
         let ek = EncapsulationKey::<P>::try_from_bytes(&ek_kb).expect("failed to parse key");
         // println!("{:02x}", ek.key.as_bytes()[<P as FipsByteArraySize>::ENCODED_EK_SIZE::USIZE - RHO_LEN-1]);
 
@@ -174,7 +174,7 @@ mod tests {
         P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
     {
         let ek_kb =
-            ByteArray::<<P as KemeleonByteArraySize>::ENCODED_EK_SIZE>::from_fn(|_| 0xff_0u8);
+            ByteArray::<<P as KemeleonByteArraySize>::ENCODED_EK_SIZE>::from_fn(|_| 0xff_u8);
         let max_ek_k = EncapsulationKey::<P>::decode_priv(ek_kb).unwrap();
         let ek_fips_b = max_ek_k.key.as_bytes();
         let (rho, max_ntt_vals) = fips::ek_decode::<P>(ek_fips_b);
@@ -183,7 +183,7 @@ mod tests {
             // Adjust the key such that the kemeleon encoded value is `k in [-2..3]` off
             // of max. When k >= 1 the value is no longer encodable as it pushes
             // over to requiring the HIGH_ORDER_BIT to be set.
-            let mut t_hat = max_ntt_vals;
+            let mut t_hat = max_ntt_vals.clone();
             t_hat[0][0] = (t_hat[0][0] as i16 + k) as u16;
             let ek_k = EncapsulationKey::<P>::from_parts(&t_hat, &rho, 0xff);
 
@@ -197,7 +197,7 @@ mod tests {
         // into the HIGH_ORDER_BIT - making it unencodable.
         let mut t_hat = Ntt::zero::<P>();
         t_hat[P::K::USIZE - 1][ARR_LEN_U - 1] = max_ntt_vals[P::K::USIZE - 1][ARR_LEN_U - 1] + 1;
-        let ek_k = EncapsulationKey::from_parts(&t_hat, &rho, 0xff);
+        let ek_k = EncapsulationKey::<P>::from_parts(&t_hat, &rho, 0xff);
 
         let mut dst = ByteArr::zero::<<P as KemeleonByteArraySize>::ENCODED_EK_SIZE>();
         let sample_success = ek_k.encode_priv(&mut dst).expect("encode failed");
@@ -375,9 +375,7 @@ mod tests {
 
         // Encode encapsulation key using Kemeleon
         let mut dst = ByteArr::zero::<<MlKem512 as KemeleonByteArraySize>::ENCODED_EK_SIZE>();
-        let encodable = ek_in
-            .encode_priv::<MlKem512>(&mut dst)
-            .expect("failed kemeleon encode");
+        let encodable = ek_in.encode_priv(&mut dst).expect("failed kemeleon encode");
         assert!(
             encodable,
             "non-encodable key provided.\n {}",
