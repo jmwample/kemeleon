@@ -3,11 +3,10 @@
 use ml_kem::*;
 
 use ::kem::Decapsulate;
-use hybrid_array::Array;
 use std::{fs::read_to_string, path::PathBuf};
 
 #[test]
-pub fn acvp_encap_decap() {
+fn acvp_encap_decap() {
     // Load the JSON test file
     let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     p.push("tests/encap-decap.json");
@@ -36,7 +35,7 @@ fn verify_encap_group(tg: &acvp::EncapTestGroup) {
 }
 
 fn verify_encap<K: KemCore>(tc: &acvp::EncapTestCase) {
-    let m = Array::try_from(tc.m.as_slice()).unwrap();
+    let m = B32::try_from(tc.m.as_slice()).unwrap();
     let ek_bytes = Encoded::<K::EncapsulationKey>::try_from(tc.ek.as_slice()).unwrap();
     let ek = K::EncapsulationKey::from_bytes(&ek_bytes);
 

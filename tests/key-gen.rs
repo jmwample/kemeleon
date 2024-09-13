@@ -2,11 +2,10 @@
 
 use ml_kem::*;
 
-use hybrid_array::Array;
 use std::{fs::read_to_string, path::PathBuf};
 
 #[test]
-pub fn acvp_key_gen() {
+fn acvp_key_gen() {
     // Load the JSON test file
     let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     p.push("tests/key-gen.json");
@@ -29,8 +28,8 @@ pub fn acvp_key_gen() {
 
 fn verify<K: KemCore>(tc: &acvp::TestCase) {
     // Import test data into the relevant array structures
-    let d = Array::try_from(tc.d.as_slice()).unwrap();
-    let z = Array::try_from(tc.z.as_slice()).unwrap();
+    let d = B32::try_from(tc.d.as_slice()).unwrap();
+    let z = B32::try_from(tc.z.as_slice()).unwrap();
     let dk_bytes = Encoded::<K::DecapsulationKey>::try_from(tc.dk.as_slice()).unwrap();
     let ek_bytes = Encoded::<K::EncapsulationKey>::try_from(tc.ek.as_slice()).unwrap();
 
