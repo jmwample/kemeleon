@@ -212,7 +212,7 @@ where
 //                          Kemeleon
 // ========================================================================== //
 
-///
+/// Ciphertext U and V inner element sizes required for encoding and decoding.
 #[allow(non_camel_case_types)]
 pub trait KemeleonEncodingSize: EncodingSize {
     /// Size of the U value of the kemeleon encoded ciphertext. Matches `T_HAT_LEN`.

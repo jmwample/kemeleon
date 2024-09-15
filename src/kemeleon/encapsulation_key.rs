@@ -63,6 +63,8 @@ where
     }
 }
 
+const R_LEN: usize = RHO_LEN::USIZE;
+
 impl<P> EncapsulationKey<P>
 where
     P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
@@ -70,7 +72,6 @@ where
     fn decode_priv(c: impl AsRef<[u8]>) -> Result<Self, EncodeError> {
         let ek_len = <P as KemeleonByteArraySize>::ENCODED_EK_SIZE::USIZE;
         let t_hat_len = <P as EncodingSize>::T_HAT_LEN::USIZE;
-        const R_LEN: usize = RHO_LEN::USIZE;
 
         if c.as_ref().len() < ek_len {
             return Err(EncodeError::invalid_ek_len(c.as_ref().len()));

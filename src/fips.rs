@@ -141,12 +141,9 @@ define_truncate!(u128, u8);
 // FIPs spec EncapsulationKey Encoding
 // ========================================================================== //
 
-pub(crate) fn ek_encode<D: FipsByteArraySize>(
-    rho: &[u8; 32],
-    ntt_vals: &NttArray<D>,
-) -> ByteArray<D::ENCODED_EK_SIZE>
+pub(crate) fn ek_encode<D>(rho: &[u8; 32], ntt_vals: &NttArray<D>) -> ByteArray<D::ENCODED_EK_SIZE>
 where
-    D: EncodingSize,
+    D: EncodingSize + FipsByteArraySize,
 {
     // let mut bytes = Array::n 0u8; D::ENCODED_EK_SIZE];
     let mut bytes: ByteArray<D::ENCODED_EK_SIZE> = Array::from_fn(|_| 0u8);
@@ -158,9 +155,9 @@ where
     bytes
 }
 
-pub(crate) fn ek_decode<D: FipsByteArraySize>(bytes: impl AsRef<[u8]>) -> ([u8; 32], NttArray<D>)
+pub(crate) fn ek_decode<D>(bytes: impl AsRef<[u8]>) -> ([u8; 32], NttArray<D>)
 where
-    D: EncodingSize,
+    D: EncodingSize + FipsByteArraySize,
 {
     //TODO: Length check on input for safety?
     assert!(
