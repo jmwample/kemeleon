@@ -98,7 +98,7 @@ where
     fn encode<R: RngCore + CryptoRng>(&mut self, rng: &mut R) -> Result<bool, EncodeError> {
         // split the u and v elements
         let (c1, c2) = split_fips_ct::<P>(&self.fips);
-        let mut r1 = fips::byte_decode::<P>(&c1);
+        let mut r1 = fips::byte_decode::<P, P::DU>(&c1);
 
         // re-add randomness to the u elements
         r1.as_flattened_mut().iter_mut().decompress::<P::DU>();
@@ -133,7 +133,7 @@ where
 
         // convert back to fips encoding of the U values
         let mut fips_ct = ByteArr::zero::<<P as FipsByteArraySize>::ENCODED_CT_SIZE>();
-        fips::byte_encode::<P>(&values, &mut fips_ct[..fips_u_len]);
+        fips::byte_encode::<P, P::DU>(&values, &mut fips_ct[..fips_u_len]);
 
         // ml_kem::Ciphertext = c1 || c2
         fips_ct[fips_u_len..].copy_from_slice(c2);

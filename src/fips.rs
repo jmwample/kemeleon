@@ -11,7 +11,7 @@
 //! properly.
 //!
 
-use hybrid_array::{typenum::Unsigned, Array};
+use hybrid_array::{typenum::Unsigned, Array, ArraySize};
 
 use crate::{ByteArray, EncodingSize, FieldElement, FipsByteArraySize, NttArray, ARR_LEN, RHO_LEN};
 
@@ -23,6 +23,8 @@ use crate::{ByteArray, EncodingSize, FieldElement, FipsByteArraySize, NttArray, 
 fn get_relative_steps(d: usize) -> (usize, usize) {
     match d {
         12 => (2, 3),
+        11 => (8, 11),
+        10 => (4, 5),
         5 => (8, 5),
         4 => (2, 1),
         _ => {
@@ -47,11 +49,12 @@ fn gcd(x: usize, y: usize) -> usize {
 // Algorithm 4 ByteEncode_d(F)
 //
 // Note: This algorithm performs compression as well as encoding.
-pub(crate) fn byte_encode<D: FipsByteArraySize>(ntt_vals: &NttArray<D>, mut dst: impl AsMut<[u8]>)
+pub(crate) fn byte_encode<D, W>(ntt_vals: &NttArray<D>, mut dst: impl AsMut<[u8]>)
 where
-    D: EncodingSize,
+    D: EncodingSize + FipsByteArraySize,
+    W: ArraySize,
 {
-    let val_width: usize = D::USIZE::USIZE;
+    let val_width: usize = W::USIZE;
     let bytes = dst.as_mut();
     let idx = val_width * D::K::USIZE * 32; // (32 = 256 / 8)
 
@@ -82,13 +85,12 @@ where
 // Algorithm 5 ByteDecode_d(F)
 //
 // Note: This function performs decompression as well as decoding.
-pub(crate) fn byte_decode<D: EncodingSize>(bytes: impl AsRef<[u8]>) -> NttArray<D> {
-    let val_width: usize = D::USIZE::USIZE;
+pub(crate) fn byte_decode<D: EncodingSize, W: ArraySize>(bytes: impl AsRef<[u8]>) -> NttArray<D> {
+    let val_width: usize = W::USIZE;
     let (val_step, byte_step) = get_relative_steps(val_width);
     let mask = (1 << val_width) - 1;
 
     let mut vals: NttArray<D> = Array::from_fn(|_| Array::from_fn(|_| 0_u16));
-    // let mut vals = [[0u16; ARR_LEN::USIZE]; D::K::USIZE];
 
     let vc = vals.as_flattened_mut().chunks_mut(val_step);
     let bc = bytes.as_ref().chunks(byte_step);
@@ -150,7 +152,7 @@ where
     let mut bytes: ByteArray<D::ENCODED_EK_SIZE> = Array::from_fn(|_| 0u8);
     let idx = D::ENCODED_EK_SIZE::USIZE - RHO_LEN::USIZE;
 
-    byte_encode::<D>(ntt_vals, &mut bytes[..idx]);
+    byte_encode::<D, D::USIZE>(ntt_vals, &mut bytes[..idx]);
     bytes[idx..].copy_from_slice(&rho[..]);
 
     bytes
@@ -160,7 +162,7 @@ pub(crate) fn ek_decode<D: FipsByteArraySize>(bytes: impl AsRef<[u8]>) -> ([u8; 
 where
     D: EncodingSize,
 {
-    //TODO: Lenth check on input for safety?
+    //TODO: Length check on input for safety?
     assert!(
         bytes.as_ref().len() > (D::ENCODED_EK_SIZE::USIZE - RHO_LEN::USIZE),
         "incorrect src len for K:{}",
@@ -168,7 +170,7 @@ where
     );
 
     let idx = bytes.as_ref().len() - RHO_LEN::USIZE;
-    let vals = byte_decode::<D>(&bytes.as_ref()[..idx]);
+    let vals = byte_decode::<D, D::USIZE>(&bytes.as_ref()[..idx]);
 
     let mut rho = [0u8; RHO_LEN::USIZE];
     rho.copy_from_slice(&bytes.as_ref()[idx..]);
