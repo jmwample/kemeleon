@@ -54,23 +54,6 @@ jobs:
     - name: Lint w/out Features
       run: cargo clippy --workspace --all-targets  --no-default-features --release
 
-    bench:
-      name: Check that benchmarks compile
-      runs-on: ubuntu-latest
-      steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Build u32 bench
-        env:
-          RUSTFLAGS: '--cfg curve25519_dalek_bits="32"'
-        run: cargo build --benches
-      - name: Build u64 bench
-        env:
-          RUSTFLAGS: '--cfg curve25519_dalek_bits="64"'
-        run: cargo build --benches
-      - name: Build default (host native) bench
-        run: cargo build --benches
-
   test-stable:
     name: Test 32/64 bit stable
     runs-on: ubuntu-latest
