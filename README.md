@@ -14,7 +14,7 @@
     <img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-blue" alt="License: MIT/Apache 2.0">
   </a>
   <a href="https://github.com/jmwample/kemeleon#minimum-supported-rust-version-msrv">
-    <img src="https://img.shields.io/badge/MSRV-1.74+-blue.svg" alt="MSRV 1.74">
+    <img src="https://img.shields.io/badge/MSRV-1.81+-blue.svg" alt="MSRV 1.81">
   </a>
 </p>
 
@@ -74,17 +74,17 @@ all values are 12 bits, but always less than 3329.
 
 ## Minimum Supported Rust Version (MSRV)
 
-The Minimum Supported Rust Versions (MSRV) for this crate is **Rust 1.74**
-(currently forced by the [`ml_kem`](https://docs.rs/ml-kem/latest/ml_kem/) dependency).
+The Minimum Supported Rust Versions (MSRV) for this crate is **Rust 1.81**
+(currently forced by the [`hybrid-array`](https://docs.rs/hybrid-array) dependency).
 This minumum version will be ensured by the test and build steps in the CI pipeline.
 
 Going forward, the MSRV can be changed at any time, but it will be done with
 a minor version bump. We will not increase MSRV on PATCH releases, though
 downstream dependencies might.
 
-We won't increase MSRV just because we can: we'll only do so when we have a
-reason. (We don't guarantee that you'll agree with our reasoning; only that
-it will exist.)
+Once this crate reaches a stable state we won't increase MSRV just because we
+can: we'll only do so when we have a reason. (We don't guarantee that you'll agree
+with our reasoning; only that it will exist.)
 
 ## Roadmap
 
