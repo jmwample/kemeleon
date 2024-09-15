@@ -95,7 +95,7 @@ Core features
 - [x] Implement complete Encapsulation Key encoding / decoding
 - [x] Implement and test ciphertext encoding / decoding
 - [x] Pass on public docs
-- [x] Switch from using [`std::io::Error`] to a locally defined error type.
+- [x] Switch from using `std::io::Error` to a locally defined error type.
 - [x] Ciphertext encoding determinism using hkdf, hmac-drbg, or something similar
 - [x] Modify implementation to be `no-std` compatible
   - [x] Swap from custom error to &str error just for simplicity (`core::error::Error` is too new)
