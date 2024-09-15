@@ -1,6 +1,10 @@
 use super::{vector_decode, vector_encode, EncapsulationKey, Encodable, Encode};
-use crate::{fips, Barr8, EncodeError, EncodingSize, FipsEncodingSize, ARR_LEN, RHO_LEN};
+use crate::{
+    fips, ByteArray, EncodeError, EncodingSize, FipsByteArraySize, KemeleonByteArraySize, Ntt,
+    RHO_LEN,
+};
 
+use hybrid_array::typenum::Unsigned;
 use ml_kem::{EncodedSizeUser, KemCore};
 
 // ========================================================================== //
@@ -9,13 +13,9 @@ use ml_kem::{EncodedSizeUser, KemCore};
 
 impl<P> Encode for EncapsulationKey<P>
 where
-    P: KemCore + EncodingSize + FipsEncodingSize,
-    [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
-    [(); <P as EncodingSize>::ENCODED_SIZE]:,
-    [(); <P as EncodingSize>::K]:,
-    [(); P::USIZE]:,
+    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
 {
-    type ET = Barr8<{ <P as EncodingSize>::ENCODED_SIZE }>;
+    type ET = ByteArray<<P as KemeleonByteArraySize>::ENCODED_EK_SIZE>;
     type Error = EncodeError;
 
     /// In this formulation a is 1 indexed (as oposed to being 0 indexed)
@@ -32,7 +32,7 @@ where
     /// resulting in a single larger integer whose intermediary bits are no longer
     /// biased.
     fn as_bytes(&self) -> Self::ET {
-        let mut dst = [0u8; <P as EncodingSize>::ENCODED_SIZE];
+        let mut dst = Self::ET::from_fn(|_| 0u8);
         // we know there will be no size error and we know the key will be encodable
         // so we do not need the result.
         let _ = self.encode_priv(&mut dst);
@@ -55,70 +55,70 @@ where
 
 impl<P> Encodable for EncapsulationKey<P>
 where
-    P: KemCore + EncodingSize + FipsEncodingSize,
-    [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
-    [(); <P as EncodingSize>::ENCODED_SIZE]:,
-    [(); <P as EncodingSize>::K]:,
-    [(); P::USIZE]:,
+    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
 {
     fn is_encodable(&self) -> bool {
-        let mut dst = [0u8; <P as EncodingSize>::ENCODED_SIZE];
+        let mut dst = ByteArray::<<P as KemeleonByteArraySize>::ENCODED_EK_SIZE>::from_fn(|_| 0u8);
         self.encode_priv(&mut dst).expect("should never fail")
     }
 }
 
+const R_LEN: usize = RHO_LEN::USIZE;
+
 impl<P> EncapsulationKey<P>
 where
-    P: KemCore + EncodingSize,
-    [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
-    [(); <P as EncodingSize>::ENCODED_SIZE]:,
-    [(); <P as EncodingSize>::K]:,
-    [(); P::USIZE]:,
+    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
 {
     fn decode_priv(c: impl AsRef<[u8]>) -> Result<Self, EncodeError> {
-        if c.as_ref().len() < P::ENCODED_SIZE {
+        let ek_len = <P as KemeleonByteArraySize>::ENCODED_EK_SIZE::USIZE;
+        let t_hat_len = <P as EncodingSize>::T_HAT_LEN::USIZE;
+
+        if c.as_ref().len() < ek_len {
             return Err(EncodeError::invalid_ek_len(c.as_ref().len()));
         }
 
         // Get the random mask byte from the high order bits
-        let rand_byte = c.as_ref()[P::T_HAT_LEN - 1] & P::MSB_BITMASK;
+        let rand_byte = c.as_ref()[t_hat_len - 1] & P::MSB_BITMASK;
 
         // extract the value of rho
-        let mut rho = [0u8; RHO_LEN];
-        rho[..].clone_from_slice(&c.as_ref()[P::T_HAT_LEN..]);
+        let mut rho = [0u8; R_LEN];
+        rho[..].clone_from_slice(&c.as_ref()[t_hat_len..]);
 
         // Remove the randomized the high order bits by setting every bit above
         // the HIGH_ORDER_BIT to 0.
-        let mut bytes = c.as_ref()[..P::T_HAT_LEN].to_vec();
-        bytes[P::T_HAT_LEN - 1] &= P::MSB_BITMASK_INV;
+        let mut bytes = c.as_ref()[..t_hat_len].to_vec();
+        bytes[t_hat_len - 1] &= P::MSB_BITMASK_INV;
 
         // extract the values
-        let mut vals = [[0u16; ARR_LEN]; P::K];
-        vector_decode(&bytes, vals.as_flattened_mut())?;
+        let mut vals = Ntt::zero::<P>();
+        vector_decode::<P>(&bytes, vals.as_flattened_mut())?;
 
         // Build the resulting key
         Ok(EncapsulationKey::<P>::from_parts(&vals, &rho, rand_byte))
     }
 
     fn encode_priv(&self, mut dst: impl AsMut<[u8]>) -> Result<bool, EncodeError> {
+        let ek_len = <P as KemeleonByteArraySize>::ENCODED_EK_SIZE::USIZE;
+        let t_hat_len = <P as EncodingSize>::T_HAT_LEN::USIZE;
+
         let k = dst.as_mut();
-        if k.len() < P::ENCODED_SIZE {
-            return Err(EncodeError::bad_dst_array(P::ENCODED_SIZE, k.len()));
+        if k.len() < ek_len {
+            return Err(EncodeError::bad_dst_array(ek_len, k.len()));
         }
 
         let vals_fips_encoded = self.key.as_bytes().to_vec();
         let (rho, vals) = fips::ek_decode::<P>(vals_fips_encoded);
 
-        let sample_success = vector_encode(vals.as_flattened(), &mut k[..P::T_HAT_LEN])?;
+        let sample_success = vector_encode::<P>(vals.as_flattened(), &mut k[..t_hat_len])?;
 
         // Clear the high order bit (and any bits above it)
-        k[P::T_HAT_LEN - 1] &= P::MSB_BITMASK_INV;
+        k[t_hat_len - 1] &= P::MSB_BITMASK_INV;
 
         // randomize the high order bits
-        k[P::T_HAT_LEN - 1] |= self.byte & P::MSB_BITMASK;
+        k[t_hat_len - 1] |= self.byte & P::MSB_BITMASK;
 
         // append rho
-        k[P::T_HAT_LEN..].copy_from_slice(&rho[..]);
+        k[t_hat_len..].copy_from_slice(&rho[..]);
 
         Ok(sample_success)
     }
@@ -132,31 +132,30 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{mlkem::Kemx, FieldElement, FipsEncodingSize};
+    use crate::{mlkem::Kemx, ByteArr, FieldElement, ARR_LEN};
     use ml_kem::{Encoded, MlKem1024, MlKem512, MlKem768};
     use num_bigint::BigUint;
 
+    const ARR_LEN_U: usize = ARR_LEN::USIZE;
+
     fn entropy_check<P>()
     where
-        P: KemCore + EncodingSize + FipsEncodingSize,
-        [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
-        [(); <P as EncodingSize>::ENCODED_SIZE]:,
-        [(); <P as EncodingSize>::K]:,
-        [(); P::USIZE]:,
+        P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
     {
-        let ek_kb = [0xff; P::ENCODED_SIZE];
-        let ek = EncapsulationKey::<P>::try_from_bytes(ek_kb).expect("failed to parse key");
-        // println!("{:02x}", ek.key.as_bytes()[P::FIPS_ENCODED_SIZE - RHO_LEN-1]);
+        let ek_kb =
+            ByteArray::<<P as KemeleonByteArraySize>::ENCODED_EK_SIZE>::from_fn(|_| 0xff_u8);
+        let ek = EncapsulationKey::<P>::try_from_bytes(&ek_kb).expect("failed to parse key");
+        // println!("{:02x}", ek.key.as_bytes()[<P as FipsByteArraySize>::ENCODED_EK_SIZE::USIZE - RHO_LEN-1]);
 
         // all bits 1 => random mask byte will match the high bit mask
         assert_eq!(P::MSB_BITMASK, ek.byte);
 
         let ek_kb_1 = ek.as_bytes();
         assert_eq!(
-            hex::encode(ek_kb),
+            hex::encode(&ek_kb),
             hex::encode(ek_kb_1),
             "failed K={}",
-            P::K
+            P::K::USIZE
         );
     }
 
@@ -173,26 +172,23 @@ mod tests {
     #[allow(clippy::cast_possible_wrap)]
     fn sample_boundary_check<P>()
     where
-        P: KemCore + EncodingSize + FipsEncodingSize,
-        [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
-        [(); <P as EncodingSize>::ENCODED_SIZE]:,
-        [(); <P as EncodingSize>::K]:,
-        [(); P::USIZE]:,
+        P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
     {
-        let ek_kb = [0xff_u8; P::ENCODED_SIZE];
-        let max_ek_k = EncapsulationKey::decode_priv(ek_kb).unwrap();
+        let ek_kb =
+            ByteArray::<<P as KemeleonByteArraySize>::ENCODED_EK_SIZE>::from_fn(|_| 0xff_u8);
+        let max_ek_k = EncapsulationKey::<P>::decode_priv(ek_kb).unwrap();
         let ek_fips_b = max_ek_k.key.as_bytes();
-        let (rho, max_ntt_vals) = fips::ek_decode(ek_fips_b);
+        let (rho, max_ntt_vals) = fips::ek_decode::<P>(ek_fips_b);
 
         for k in -2_i16..3 {
             // Adjust the key such that the kemeleon encoded value is `k in [-2..3]` off
             // of max. When k >= 1 the value is no longer encodable as it pushes
             // over to requiring the HIGH_ORDER_BIT to be set.
-            let mut t_hat = max_ntt_vals;
+            let mut t_hat = max_ntt_vals.clone();
             t_hat[0][0] = (t_hat[0][0] as i16 + k) as u16;
-            let ek_k = EncapsulationKey::from_parts(&t_hat, &rho, 0xff);
+            let ek_k = EncapsulationKey::<P>::from_parts(&t_hat, &rho, 0xff);
 
-            let mut dst = [0u8; P::ENCODED_SIZE];
+            let mut dst = ByteArr::zero::<<P as KemeleonByteArraySize>::ENCODED_EK_SIZE>(); // [0u8; P::ENCODED_EK_SIZE];
             let sample_success = ek_k.encode_priv(&mut dst).expect("encode failed");
 
             assert_eq!(sample_success, k <= 0, "{k} incorrect");
@@ -200,11 +196,11 @@ mod tests {
 
         // Similarly incrementing the high order byte will be high enough to overflow
         // into the HIGH_ORDER_BIT - making it unencodable.
-        let mut t_hat = [[0_u16; ARR_LEN]; P::K];
-        t_hat[P::K - 1][ARR_LEN - 1] = max_ntt_vals[P::K - 1][ARR_LEN - 1] + 1;
-        let ek_k = EncapsulationKey::from_parts(&t_hat, &rho, 0xff);
+        let mut t_hat = Ntt::zero::<P>();
+        t_hat[P::K::USIZE - 1][ARR_LEN_U - 1] = max_ntt_vals[P::K::USIZE - 1][ARR_LEN_U - 1] + 1;
+        let ek_k = EncapsulationKey::<P>::from_parts(&t_hat, &rho, 0xff);
 
-        let mut dst = [0u8; P::ENCODED_SIZE];
+        let mut dst = ByteArr::zero::<<P as KemeleonByteArraySize>::ENCODED_EK_SIZE>();
         let sample_success = ek_k.encode_priv(&mut dst).expect("encode failed");
 
         assert!(!sample_success, "increment high order byte incorrect");
@@ -220,24 +216,20 @@ mod tests {
 
     fn consistency_check<P>()
     where
-        P: KemCore + EncodingSize + FipsEncodingSize,
-        [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
-        [(); <P as EncodingSize>::ENCODED_SIZE]:,
-        [(); <P as EncodingSize>::K]:,
-        [(); P::USIZE]:,
+        P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
     {
         let mut rng = rand::thread_rng();
         // This is the repeated-trial generate function and any key created
         // is guaranteed to be representable, otherwise it would have panicked
         let (_dk, ek) = Kemx::<P>::generate(&mut rng);
         let dst = ek.as_bytes();
-        let mut re_encode = dst;
+        let mut re_encode = dst.clone();
 
         for _ in 0..5 {
             // Encapsulation Key decoded from bytes sent over the wire.
             let recv_ek = EncapsulationKey::<P>::decode_priv(re_encode).expect("failed decode");
             re_encode = recv_ek.as_bytes();
-            assert_eq!(hex::encode(re_encode), hex::encode(dst));
+            assert_eq!(hex::encode(&re_encode), hex::encode(&dst));
         }
     }
 
@@ -251,11 +243,7 @@ mod tests {
 
     fn value_check<P>(b: &[u8], v: &BigUint, description: &str)
     where
-        P: KemCore + EncodingSize,
-        [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
-        [(); <P as EncodingSize>::ENCODED_SIZE]:,
-        [(); <P as EncodingSize>::K]:,
-        [(); P::USIZE]:,
+        P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
     {
         let encoded = Encoded::<P::EncapsulationKey>::try_from(b).unwrap();
         let key = EncapsulationKey::<P> {
@@ -263,7 +251,7 @@ mod tests {
             byte: 0x00,
         };
         if key.is_encodable() {
-            let kv = BigUint::from_bytes_le(&key.as_bytes()[..P::T_HAT_LEN]);
+            let kv = BigUint::from_bytes_le(&key.as_bytes()[..P::T_HAT_LEN::USIZE]);
             assert_eq!(&kv, v, "{description}");
         }
     }
@@ -271,72 +259,69 @@ mod tests {
     // make sure specific values map in the way we expect them to.
     fn specific_values_trial<P>()
     where
-        P: KemCore + EncodingSize + FipsEncodingSize,
-        [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
-        [(); <P as EncodingSize>::ENCODED_SIZE]:,
-        [(); <P as EncodingSize>::K]:,
-        [(); P::USIZE]:,
+        P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
     {
-        let zero = [0u8; P::FIPS_ENCODED_SIZE];
-        value_check(&zero, &BigUint::ZERO, "zero");
+        let zero = ByteArr::zero::<<P as FipsByteArraySize>::ENCODED_EK_SIZE>();
+        value_check::<P>(&zero, &BigUint::ZERO, "zero");
 
         // 01 00 -> 01
-        let mut one = zero;
+        let mut one = zero.clone();
         one[0] = 0x01_u8;
-        value_check(&one, &BigUint::from(1_u64), "one -> [0][0] = 1");
+        value_check::<P>(&one, &BigUint::from(1_u64), "one -> [0][0] = 1");
 
         // 01 0d -> 3329 -> 0
-        let mut one = zero;
+        let mut one = zero.clone();
         one[0] = 0x01_u8;
         one[1] = 0x0d_u8;
-        value_check(&one, &BigUint::ZERO, "one -> [0][0] = 1");
+        value_check::<P>(&one, &BigUint::ZERO, "one -> [0][0] = 1");
 
         // 00 10 00 -> 3329   (1<<12)le
-        let mut x3329 = zero;
+        let mut x3329 = zero.clone();
         x3329[1] = 0x10_u8;
-        value_check(&x3329, &BigUint::from(3329_u64), "[0][1] = 1");
+        value_check::<P>(&x3329, &BigUint::from(3329_u64), "[0][1] = 1");
 
         // ff 0f 00 -> 0x0fff % 3329
-        let mut x = zero;
+        let mut x = zero.clone();
         x[0] = 0xff_u8;
         x[1] = 0x0f_u8;
-        value_check(&x, &BigUint::from(0x0fff % 3329_u64), "[0][1] = ff");
+        value_check::<P>(&x, &BigUint::from(0x0fff % 3329_u64), "[0][1] = ff");
 
         // 00 f0 0f -> 0xff * 3329
-        let mut x = zero;
+        let mut x = zero.clone();
         x[1] = 0xf0_u8;
         x[2] = 0x0f_u8;
-        value_check(&x, &BigUint::from(3329_u64 * 0xff_u64), "[0][1] = ff");
+        value_check::<P>(&x, &BigUint::from(3329_u64 * 0xff_u64), "[0][1] = ff");
 
         // 01 10 -> 3330
-        let mut x = zero;
+        let mut x = zero.clone();
         x[0] = 0x01_u8;
         x[1] = 0x10_u8;
-        value_check(&x, &BigUint::from(3330_u64), "01 10 => 3330");
+        value_check::<P>(&x, &BigUint::from(3330_u64), "01 10 => 3330");
 
         // 00000000... 00 00 10 00 ->  3329 ^(P::K * 256 - 1)
-        let mut x = zero;
-        x[P::FIPS_ENCODED_SIZE - RHO_LEN - 2] = 0x10_u8;
-        value_check(
+        let mut x = zero.clone();
+        x[<P as FipsByteArraySize>::ENCODED_EK_SIZE::USIZE - RHO_LEN::USIZE - 2] = 0x10_u8;
+        value_check::<P>(
             &x,
-            &BigUint::from(3329_u64).pow((P::K * ARR_LEN - 1) as u32),
+            &BigUint::from(3329_u64).pow((P::K::USIZE * ARR_LEN_U - 1) as u32),
             ".... 00 01 00 => 3329 ^(P::K * 256 - 1)",
         );
 
         // 00000000... 0000f00f ->  (0xff) * 3329 ^(P::K * 256 - 1)
-        let mut x = zero;
-        x[P::FIPS_ENCODED_SIZE - RHO_LEN - 1] = 0x0f_u8;
-        x[P::FIPS_ENCODED_SIZE - RHO_LEN - 2] = 0xf0_u8;
-        value_check(
+        let mut x = zero.clone();
+        x[<P as FipsByteArraySize>::ENCODED_EK_SIZE::USIZE - RHO_LEN::USIZE - 1] = 0x0f_u8;
+        x[<P as FipsByteArraySize>::ENCODED_EK_SIZE::USIZE - RHO_LEN::USIZE - 2] = 0xf0_u8;
+        value_check::<P>(
             &x,
-            &(BigUint::from(0x00ff_u64) * BigUint::from(3329_u64).pow((P::K * ARR_LEN - 1) as u32)),
+            &(BigUint::from(0x00ff_u64)
+                * BigUint::from(3329_u64).pow((P::K::USIZE * ARR_LEN_U - 1) as u32)),
             ".... 00 f0 0f => (0x0ff) * 3329 ^(P::K * 256 - 1)",
         );
 
         // 00000000... 00 00 00 00 | ff ->  0
-        let mut x = zero;
-        x[P::FIPS_ENCODED_SIZE - RHO_LEN] = 0xff_u8;
-        value_check(&x, &BigUint::ZERO, ".... 00 00 00 | ff => 0");
+        let mut x = zero.clone();
+        x[<P as FipsByteArraySize>::ENCODED_EK_SIZE::USIZE - RHO_LEN::USIZE] = 0xff_u8;
+        value_check::<P>(&x, &BigUint::ZERO, ".... 00 00 00 | ff => 0");
     }
 
     #[test]
@@ -348,11 +333,7 @@ mod tests {
 
     fn encode_decode_trial<P>()
     where
-        P: KemCore + EncodingSize + FipsEncodingSize,
-        [(); <P as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
-        [(); <P as EncodingSize>::ENCODED_SIZE]:,
-        [(); <P as EncodingSize>::K]:,
-        [(); P::USIZE]:,
+        P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
     {
         let mut rng = rand::thread_rng();
         // This is the repeated trial generate from random and any key created
@@ -394,7 +375,7 @@ mod tests {
         };
 
         // Encode encapsulation key using Kemeleon
-        let mut dst = [0u8; MlKem512::ENCODED_SIZE];
+        let mut dst = ByteArr::zero::<<MlKem512 as KemeleonByteArraySize>::ENCODED_EK_SIZE>();
         let encodable = ek_in.encode_priv(&mut dst).expect("failed kemeleon encode");
         assert!(
             encodable,
@@ -456,7 +437,7 @@ mod tests {
             let mut v = BigUint::ZERO;
             let mut offset = BigUint::from(1_u64);
             for _ in 0..k {
-                for _ in 0..ARR_LEN {
+                for _ in 0..ARR_LEN_U {
                     v += 3328_u16 * &offset;
                     offset *= &base;
                 }
@@ -475,7 +456,7 @@ mod tests {
         }
 
         let q = BigUint::from(FieldElement::Q64);
-        let max_value = q.pow(ARR_LEN as u32 * 3_u32) - 1u32;
+        let max_value = q.pow(ARR_LEN_U as u32 * 3_u32) - 1u32;
         let max_val_bits: u32 = max_value.bits() as u32;
         // println!("{} {}", max_val_bits, hex::encode(max_value.to_bytes_le()));
 

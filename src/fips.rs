@@ -11,7 +11,9 @@
 //! properly.
 //!
 
-use crate::{Barr8, EncodingSize, FieldElement, FipsEncodingSize, NttArray, ARR_LEN, RHO_LEN};
+use hybrid_array::{typenum::Unsigned, Array, ArraySize};
+
+use crate::{ByteArray, EncodingSize, FieldElement, FipsByteArraySize, NttArray, ARR_LEN, RHO_LEN};
 
 /// This is a helper function for computing a conversion of number of values to
 /// number of bytes when encoding values using `d` bits each.
@@ -21,6 +23,8 @@ use crate::{Barr8, EncodingSize, FieldElement, FipsEncodingSize, NttArray, ARR_L
 fn get_relative_steps(d: usize) -> (usize, usize) {
     match d {
         12 => (2, 3),
+        11 => (8, 11),
+        10 => (4, 5),
         5 => (8, 5),
         4 => (2, 1),
         _ => {
@@ -45,14 +49,14 @@ fn gcd(x: usize, y: usize) -> usize {
 // Algorithm 4 ByteEncode_d(F)
 //
 // Note: This algorithm performs compression as well as encoding.
-pub(crate) fn byte_encode<D, const USIZE: usize>(
-    ntt_vals: &NttArray<{ D::K }>,
-    mut dst: impl AsMut<[u8]>,
-) where
-    D: EncodingSize,
+pub(crate) fn byte_encode<D, W>(ntt_vals: &NttArray<D>, mut dst: impl AsMut<[u8]>)
+where
+    D: EncodingSize + FipsByteArraySize,
+    W: ArraySize,
 {
+    let val_width: usize = W::USIZE;
     let bytes = dst.as_mut();
-    let idx = USIZE * D::K * 32; // (32 = 256 / 8)
+    let idx = val_width * D::K::USIZE * 32; // (32 = 256 / 8)
 
     // TODO should I remove this length check or convert it to a result?
     assert_eq!(
@@ -60,17 +64,17 @@ pub(crate) fn byte_encode<D, const USIZE: usize>(
         idx,
         "incorrect dst len {} != {idx}  K:{}",
         bytes.len(),
-        D::K
+        D::K::USIZE,
     );
 
-    let (val_step, byte_step) = get_relative_steps(USIZE);
+    let (val_step, byte_step) = get_relative_steps(val_width);
 
     let vc = ntt_vals.as_flattened().chunks(val_step);
     let bc = bytes[..idx].chunks_mut(byte_step);
     for (v, b) in vc.zip(bc) {
         let mut x = 0u128;
         for (j, vj) in v.iter().enumerate() {
-            x |= u128::from(*vj) << (USIZE * j);
+            x |= u128::from(*vj) << (val_width * j);
         }
 
         let xb = x.to_le_bytes();
@@ -81,13 +85,12 @@ pub(crate) fn byte_encode<D, const USIZE: usize>(
 // Algorithm 5 ByteDecode_d(F)
 //
 // Note: This function performs decompression as well as decoding.
-pub(crate) fn byte_decode<D: EncodingSize, const USIZE: usize>(
-    bytes: impl AsRef<[u8]>,
-) -> NttArray<{ D::K }> {
-    let (val_step, byte_step) = get_relative_steps(USIZE);
-    let mask = (1 << USIZE) - 1;
+pub(crate) fn byte_decode<D: EncodingSize, W: ArraySize>(bytes: impl AsRef<[u8]>) -> NttArray<D> {
+    let val_width: usize = W::USIZE;
+    let (val_step, byte_step) = get_relative_steps(val_width);
+    let mask = (1 << val_width) - 1;
 
-    let mut vals = [[0u16; ARR_LEN]; D::K];
+    let mut vals: NttArray<D> = Array::from_fn(|_| Array::from_fn(|_| 0_u16));
 
     let vc = vals.as_flattened_mut().chunks_mut(val_step);
     let bc = bytes.as_ref().chunks(byte_step);
@@ -98,10 +101,10 @@ pub(crate) fn byte_decode<D: EncodingSize, const USIZE: usize>(
         let x = u128::from_le_bytes(xb);
         for (j, v_out) in v.iter_mut().enumerate() {
             // TODO: is the truncate implementation really necessary?
-            let val: u16 = (x >> (USIZE * j)).truncate();
+            let val: u16 = (x >> (val_width * j)).truncate();
             *v_out = val & mask;
 
-            if USIZE == 12 {
+            if val_width == 12 {
                 *v_out %= FieldElement::Q;
             }
         }
@@ -138,39 +141,35 @@ define_truncate!(u128, u8);
 // FIPs spec EncapsulationKey Encoding
 // ========================================================================== //
 
-pub(crate) fn ek_encode<D>(
-    rho: &[u8; 32],
-    ntt_vals: &NttArray<{ D::K }>,
-) -> Barr8<{ D::FIPS_ENCODED_SIZE }>
+pub(crate) fn ek_encode<D>(rho: &[u8; 32], ntt_vals: &NttArray<D>) -> ByteArray<D::ENCODED_EK_SIZE>
 where
-    D: EncodingSize,
-    [(); D::USIZE]:,
+    D: EncodingSize + FipsByteArraySize,
 {
-    let mut bytes = [0u8; D::FIPS_ENCODED_SIZE];
-    let idx = D::FIPS_ENCODED_SIZE - RHO_LEN;
+    // let mut bytes = Array::n 0u8; D::ENCODED_EK_SIZE];
+    let mut bytes: ByteArray<D::ENCODED_EK_SIZE> = Array::from_fn(|_| 0u8);
+    let idx = D::ENCODED_EK_SIZE::USIZE - RHO_LEN::USIZE;
 
-    byte_encode::<D, { D::USIZE }>(ntt_vals, &mut bytes[..idx]);
+    byte_encode::<D, D::USIZE>(ntt_vals, &mut bytes[..idx]);
     bytes[idx..].copy_from_slice(&rho[..]);
 
     bytes
 }
 
-pub(crate) fn ek_decode<D>(bytes: impl AsRef<[u8]>) -> ([u8; 32], NttArray<{ D::K }>)
+pub(crate) fn ek_decode<D>(bytes: impl AsRef<[u8]>) -> ([u8; 32], NttArray<D>)
 where
-    D: EncodingSize,
-    [(); D::USIZE]:,
+    D: EncodingSize + FipsByteArraySize,
 {
-    //TODO: Lenth check on input for safety?
+    //TODO: Length check on input for safety?
     assert!(
-        bytes.as_ref().len() > (D::FIPS_ENCODED_SIZE - RHO_LEN),
+        bytes.as_ref().len() > (D::ENCODED_EK_SIZE::USIZE - RHO_LEN::USIZE),
         "incorrect src len for K:{}",
-        D::K
+        D::K::USIZE
     );
 
-    let idx = bytes.as_ref().len() - RHO_LEN;
-    let vals = byte_decode::<D, { D::USIZE }>(&bytes.as_ref()[..idx]);
+    let idx = bytes.as_ref().len() - RHO_LEN::USIZE;
+    let vals = byte_decode::<D, D::USIZE>(&bytes.as_ref()[..idx]);
 
-    let mut rho = [0u8; RHO_LEN];
+    let mut rho = [0u8; RHO_LEN::USIZE];
     rho.copy_from_slice(&bytes.as_ref()[idx..]);
 
     (rho, vals)
@@ -180,11 +179,11 @@ where
 // FIPs spec Ciphertext Utilities
 // ========================================================================== //
 
-pub(crate) fn ct_vdecompress(dv: usize, bytes: &[u8]) -> [u16; ARR_LEN] {
+pub(crate) fn ct_vdecompress(dv: usize, bytes: &[u8]) -> [u16; ARR_LEN::USIZE] {
     let (val_step, byte_step) = get_relative_steps(dv);
     let mask = (1 << dv) - 1;
 
-    let mut vals = [0u16; ARR_LEN];
+    let mut vals = [0u16; ARR_LEN::USIZE];
 
     let vc = vals.chunks_mut(val_step);
     let bc = bytes.as_ref().chunks(byte_step);
@@ -208,17 +207,14 @@ pub(crate) fn ct_vdecompress(dv: usize, bytes: &[u8]) -> [u16; ARR_LEN] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{EncodingSize, FipsEncodingSize, RHO_LEN};
+    use crate::RHO_LEN;
     use hex_literal::hex;
 
     use ml_kem::{Encoded, EncodedSizeUser, KemCore, MlKem1024, MlKem512, MlKem768};
 
     fn fips_encode_trial<D>()
     where
-        D: KemCore + EncodingSize,
-        [(); D::USIZE]:,
-        [(); <D as EncodingSize>::K]:,
-        [(); <D as FipsEncodingSize>::FIPS_ENCODED_SIZE]:,
+        D: KemCore + FipsByteArraySize,
     {
         let mut rng = rand::thread_rng();
         let (_, ek) = D::generate(&mut rng);
@@ -230,14 +226,14 @@ mod tests {
         let bytes_out = ek_encode::<D>(&rho, &ntt);
         // check that the byte representation of rho matches.
         assert_eq!(
-            hex::encode(&bytes_in[..RHO_LEN]),
-            hex::encode(&bytes_out[..RHO_LEN]),
+            hex::encode(&bytes_in[..RHO_LEN::USIZE]),
+            hex::encode(&bytes_out[..RHO_LEN::USIZE]),
             "rho values do not match"
         );
         // check that the byte representation of the polynomials matches.
         assert_eq!(
-            hex::encode(&bytes_in[RHO_LEN..]),
-            hex::encode(&bytes_out[RHO_LEN..]),
+            hex::encode(&bytes_in[RHO_LEN::USIZE..]),
+            hex::encode(&bytes_out[RHO_LEN::USIZE..]),
             "polynomials do not match"
         );
 

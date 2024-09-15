@@ -6,10 +6,13 @@ pub use crate::mlkem::KDecapsulationKey as DecapsulationKey;
 /// An `EncapsulationKey` provides the ability to encapsulate a shared key so that it can
 /// only be decapsulated by the holder of the corresponding decapsulation key.
 pub use crate::mlkem::KEncapsulationKey as EncapsulationKey;
-use crate::{EncodeError, EncodingSize, FieldElement, FipsEncodingSize};
+use crate::FipsByteArraySize;
+use crate::KemeleonByteArraySize;
+use crate::{EncodeError, EncodingSize, FieldElement};
 
 use core::cmp::min;
 
+use hybrid_array::typenum::Unsigned;
 use ml_kem::KemCore;
 use num_bigint::BigUint;
 
@@ -48,12 +51,11 @@ pub(crate) fn vector_encode<P>(
     mut c: impl AsMut<[u8]>,
 ) -> Result<bool, EncodeError>
 where
-    P: KemCore + EncodingSize,
-    [(); P::K]:,
+    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
 {
     let dst = c.as_mut();
-    if dst.len() < P::T_HAT_LEN {
-        return Err(EncodeError::bad_dst_array(P::T_HAT_LEN, dst.len()));
+    if dst.len() < P::T_HAT_LEN::USIZE {
+        return Err(EncodeError::bad_dst_array(P::T_HAT_LEN::USIZE, dst.len()));
     }
 
     let mut out = BigUint::ZERO;
@@ -69,11 +71,11 @@ where
 
     // avoid out-of-bounds access if high order byte is 0x00
     let b = out.to_bytes_le();
-    let l = min(P::T_HAT_LEN, b.len());
+    let l = min(P::T_HAT_LEN::USIZE, b.len());
     dst[..l].copy_from_slice(&b[..l]);
 
     // Sample failure if High order bit is set.
-    Ok(dst[P::T_HAT_LEN - 1] & P::MSB_BITMASK == 0)
+    Ok(dst[P::T_HAT_LEN::USIZE - 1] & P::MSB_BITMASK == 0)
 }
 
 pub(crate) fn vector_decode<P>(
@@ -82,10 +84,8 @@ pub(crate) fn vector_decode<P>(
 ) -> Result<(), EncodeError>
 where
     P: KemCore + EncodingSize,
-    [(); P::K]:,
-    [(); P::FIPS_ENCODED_SIZE]:,
 {
-    if c.as_ref().len() < <P as EncodingSize>::T_HAT_LEN {
+    if c.as_ref().len() < P::T_HAT_LEN::USIZE {
         return Err(EncodeError::invalid_ctxt_len(c.as_ref().len()));
     }
 

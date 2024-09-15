@@ -6,11 +6,10 @@
 // do not warn about downcasting
 #![deny(missing_docs)] // Require all public interfaces to be documented
 #![allow(clippy::missing_errors_doc)] // adding Errors section is more than I want to do
-#![allow(incomplete_features)]
-#![feature(generic_const_exprs)]
 #![doc = include_str!("../README.md")]
 
 use core::fmt::Debug;
+use core::ops::{Add, Mul};
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
@@ -22,6 +21,15 @@ mod mlkem;
 
 pub use errors::*;
 pub use kemeleon::*;
+
+use hybrid_array::{
+    sizes::{U1124, U1498, U749},
+    typenum::{
+        operator_aliases::{Prod, Sum},
+        U10, U11, U12, U2, U256, U3, U32, U384, U4, U5,
+    },
+    Array, ArraySize,
+};
 
 #[derive(Copy, Clone, Default, PartialEq, PartialOrd)]
 pub(crate) struct FieldElement(pub u16);
@@ -50,14 +58,30 @@ impl From<u16> for FieldElement {
     }
 }
 
-const ARR_LEN: usize = 256;
-const RHO_LEN: usize = 32;
+#[allow(non_camel_case_types)]
+type ARR_LEN = U256;
+#[allow(non_camel_case_types)]
+type RHO_LEN = U32;
 
 /// byte array
-type Barr8<const N: usize> = [u8; N];
+type ByteArray<N> = Array<u8, N>;
 /// value array -- array of polynomial values
-type ValueArray<const N: usize, const K: usize> = [[u16; N]; K];
-type NttArray<const K: usize> = ValueArray<ARR_LEN, K>;
+type NttArray<P> = Array<Array<u16, ARR_LEN>, <P as EncodingSize>::K>;
+struct Ntt;
+
+impl Ntt {
+    fn zero<P: EncodingSize>() -> NttArray<P> {
+        Array::<Array<u16, ARR_LEN>, P::K>::from_fn(|_| Array::<u16, ARR_LEN>::from_fn(|_| 0u16))
+    }
+}
+
+struct ByteArr;
+
+impl ByteArr {
+    fn zero<N: ArraySize>() -> ByteArray<N> {
+        ByteArray::<N>::from_fn(|_| 0u8)
+    }
+}
 
 #[allow(dead_code)]
 impl FieldElement {
@@ -96,12 +120,23 @@ pub trait Transcode {
 /// HIGH\\\_ORDER\\\_BIT = \left\lceil log_{2}(q^{n\cdot k}+1) - 1 \right\rceil
 /// $$
 ///
+#[allow(non_camel_case_types)]
 pub trait EncodingSize {
     /// Number of bits used to represent field elements
-    const USIZE: usize = 12_usize;
+    type USIZE: ArraySize;
 
     /// Number of field elements per equation.
-    const K: usize;
+    type K: ArraySize;
+
+    /// The bit width of encoded integers in the `u` vector in a ciphertext
+    type DU: ArraySize;
+    /// The bit width of encoded integers in the `v` vector in a ciphertext
+    type DV: ArraySize;
+
+    /// Number of bytes for just `t_hat` values in a kemeleon encoded value
+    ///
+    /// Computed as: $\left\lceil (HIGH\\_ORDER\\_BIT -1)/8 \right\rceil$
+    type T_HAT_LEN: ArraySize;
 
     /// Bitmask for the high order byte which will be less than a full byte of
     /// random bits when encoded.
@@ -111,71 +146,149 @@ pub trait EncodingSize {
     /// Bitmask for the high order byte which will be less than a full byte of
     /// random bits when encoded. Inversion of [`EncodingSize::MSB_BITMASK`].
     const MSB_BITMASK_INV: u8 = !Self::MSB_BITMASK;
+}
 
-    /// The bit width of encoded integers in the `u` vector in a ciphertext
-    const DU: usize;
-    /// The bit width of encoded integers in the `v` vector in a ciphertext
-    const DV: usize;
+// ========================================================================== //
+//                          FIPS
+// ========================================================================== //
 
-    /// Number of bytes for just `t_hat` values in a kemeleon encoded value
-    ///
-    /// Computed as: $\left\lceil (HIGH\\_ORDER\\_BIT -1)/8 \right\rceil$
-    const T_HAT_LEN: usize;
-    /// Size of the Kemeleon encoded string as bytes.
-    ///
-    /// Computed as: $T\\_HAT\\_LEN + RHO\\_LEN$
-    const ENCODED_SIZE: usize = Self::T_HAT_LEN + RHO_LEN;
+/// Fips encoding size values
+#[allow(non_camel_case_types)]
+pub trait FipsEncodingSize: EncodingSize {
+    /// Length of an NTT Vector encoded and compressed
+    type FIPS_T_HAT_LEN: ArraySize;
 
+    /// Size of the compressed U element of an ML-KEM ciphertext. $Du * K * 256 / 8$
+    type FIPS_ENCODED_USIZE: ArraySize;
+    /// Size of the compressed V element of an ML-KEM ciphertext. $Dv * 256 / 8$
+    type FIPS_ENCODED_VSIZE: ArraySize;
+}
+
+impl<T: EncodingSize> FipsEncodingSize for T
+where
+    <T as EncodingSize>::K: Mul<U384>,
+    <<T as EncodingSize>::K as Mul<U384>>::Output: ArraySize,
+
+    <T as EncodingSize>::DV: Mul<U32>,
+    <<T as EncodingSize>::DV as Mul<U32>>::Output: ArraySize,
+
+    <T as EncodingSize>::K: Mul<<T as EncodingSize>::DU>,
+    <<T as EncodingSize>::K as Mul<<T as EncodingSize>::DU>>::Output: ArraySize,
+
+    <<T as EncodingSize>::K as Mul<<T as EncodingSize>::DU>>::Output: Mul<U32>,
+    <<<T as EncodingSize>::K as Mul<<T as EncodingSize>::DU>>::Output as Mul<U32>>::Output:
+        ArraySize,
+{
+    type FIPS_T_HAT_LEN = Prod<Self::K, U384>;
+    type FIPS_ENCODED_USIZE = Prod<Prod<T::K, T::DU>, U32>;
+    type FIPS_ENCODED_VSIZE = Prod<T::DV, U32>;
+}
+
+/// Lengths associated with the FIPS ML-KEM encoding of Encapsulation Keys and Ciphertexts.
+#[allow(non_camel_case_types)]
+pub trait FipsByteArraySize: FipsEncodingSize {
+    /// Length of an encoded encapsulation key
+    type ENCODED_EK_SIZE: ArraySize;
+
+    /// Size of a ciphertext encoded and compressed.
+    type ENCODED_CT_SIZE: ArraySize;
+}
+
+impl<T: FipsEncodingSize> FipsByteArraySize for T
+where
+    <T as FipsEncodingSize>::FIPS_ENCODED_USIZE: Add<<T as FipsEncodingSize>::FIPS_ENCODED_VSIZE>,
+    <<T as FipsEncodingSize>::FIPS_ENCODED_USIZE as Add<
+        <T as FipsEncodingSize>::FIPS_ENCODED_VSIZE,
+    >>::Output: ArraySize,
+
+    <T as FipsEncodingSize>::FIPS_T_HAT_LEN: Add<RHO_LEN>,
+    <<T as FipsEncodingSize>::FIPS_T_HAT_LEN as Add<RHO_LEN>>::Output: ArraySize,
+{
+    type ENCODED_EK_SIZE = Sum<T::FIPS_T_HAT_LEN, RHO_LEN>;
+    type ENCODED_CT_SIZE = Sum<T::FIPS_ENCODED_USIZE, T::FIPS_ENCODED_VSIZE>;
+}
+
+// ========================================================================== //
+//                          Kemeleon
+// ========================================================================== //
+
+/// Ciphertext U and V inner element sizes required for encoding and decoding.
+#[allow(non_camel_case_types)]
+pub trait KemeleonEncodingSize: EncodingSize {
     /// Size of the U value of the kemeleon encoded ciphertext. Matches `T_HAT_LEN`.
-    const ENCODED_USIZE: usize = Self::T_HAT_LEN;
+    type ENCODED_USIZE: ArraySize;
     #[allow(clippy::doc_markdown)]
     /// Size of the V value of the Kemeleon encoded ciphertext. N values of Dv Bit size.
     /// The number of bytes is computed as $ ENCODED_VSIZE = n * D_v / 8 \text{ --- for } n=256 $
-    const ENCODED_VSIZE: usize = 32 * Self::DV;
-    /// Size of the combined kemeleon encoded ciphertext.
-    const ENCODED_CT_SIZE: usize = Self::ENCODED_USIZE + Self::ENCODED_VSIZE;
+    type ENCODED_VSIZE: ArraySize;
 }
 
-/// Fips encoding size values
-pub trait FipsEncodingSize: EncodingSize {
-    /// Length of an NTT Vector encoded and compressed
-    const FIPS_T_HAT_LEN: usize = Self::K * 12 * 32;
-    /// Length of an encoded FIPS encapsulation key
-    const FIPS_ENCODED_SIZE: usize = Self::FIPS_T_HAT_LEN + RHO_LEN;
-
-    /// Size of the compressed U element of an ML-KEM ciphertext.
-    const FIPS_ENCODED_USIZE: usize = 32 * Self::DU * Self::K;
-    /// Size of the compressed V element of an ML-KEM ciphertext.
-    const FIPS_ENCODED_VSIZE: usize = 32 * Self::DV;
-    /// Size of a ciphertext encoded and compressed using FIPS standard.
-    const FIPS_ENCODED_CT_SIZE: usize = Self::FIPS_ENCODED_USIZE + Self::FIPS_ENCODED_VSIZE;
+impl<T: EncodingSize> KemeleonEncodingSize for T
+where
+    <T as EncodingSize>::DV: Mul<U32>,
+    <<T as EncodingSize>::DV as Mul<U32>>::Output: ArraySize,
+{
+    type ENCODED_USIZE = T::T_HAT_LEN;
+    type ENCODED_VSIZE = Prod<Self::DV, U32>;
 }
-impl<T: EncodingSize> FipsEncodingSize for T {}
+
+/// Lengths associated with the Kemeleon ML-KEM encoding of Encapsulation Keys and Ciphertexts.
+#[allow(non_camel_case_types)]
+pub trait KemeleonByteArraySize: KemeleonEncodingSize {
+    /// Length of a Kemeleon encoded encapsulation key as bytes.
+    ///
+    /// Computed as: $T\\_HAT\\_LEN + RHO\\_LEN$
+    type ENCODED_EK_SIZE: ArraySize;
+
+    /// Size of a ciphertext encoded and compressed.
+    type ENCODED_CT_SIZE: ArraySize;
+}
+
+impl<T: KemeleonEncodingSize> KemeleonByteArraySize for T
+where
+    <T as KemeleonEncodingSize>::ENCODED_VSIZE: Add<<T as KemeleonEncodingSize>::ENCODED_USIZE>,
+    <<T as KemeleonEncodingSize>::ENCODED_VSIZE as Add<
+        <T as KemeleonEncodingSize>::ENCODED_USIZE,
+    >>::Output: ArraySize,
+
+    <T as EncodingSize>::T_HAT_LEN: Add<RHO_LEN>,
+    <<T as EncodingSize>::T_HAT_LEN as Add<RHO_LEN>>::Output: ArraySize,
+{
+    type ENCODED_EK_SIZE = Sum<T::T_HAT_LEN, RHO_LEN>;
+    type ENCODED_CT_SIZE = Sum<T::ENCODED_VSIZE, T::ENCODED_USIZE>;
+}
+
+// ========================================================================== //
+//                          Implementation
+// ========================================================================== //
 
 impl EncodingSize for ml_kem::MlKem512 {
-    const K: usize = 2;
-    const DU: usize = 10;
-    const DV: usize = 4;
+    type USIZE = U12;
+    type K = U2;
+    type DU = U10;
+    type DV = U4;
 
-    const T_HAT_LEN: usize = 749;
+    type T_HAT_LEN = U749;
     const MSB_BITMASK: u8 = 0b1100_0000;
 }
 
 impl EncodingSize for ml_kem::MlKem768 {
-    const K: usize = 3;
-    const DU: usize = 10;
-    const DV: usize = 4;
+    type USIZE = U12;
+    type K = U3;
+    type DU = U10;
+    type DV = U4;
 
-    const T_HAT_LEN: usize = 1124;
+    type T_HAT_LEN = U1124;
     const MSB_BITMASK: u8 = 0b1111_1100;
 }
 
 impl EncodingSize for ml_kem::MlKem1024 {
-    const K: usize = 4;
-    const DU: usize = 11;
-    const DV: usize = 5;
+    type USIZE = U12;
+    type K = U4;
+    type DU = U11;
+    type DV = U5;
 
-    const T_HAT_LEN: usize = 1498;
+    type T_HAT_LEN = U1498;
     const MSB_BITMASK: u8 = 0b1110_0000;
 }
 
@@ -196,10 +309,12 @@ impl<P> EncodingSize for mlkem::Kemx<P>
 where
     P: ml_kem::KemCore + EncodingSize,
 {
-    const K: usize = P::K;
-    const DU: usize = P::DU;
-    const DV: usize = P::DV;
+    //_1011_1001_0100
+    type USIZE = P::USIZE;
+    type K = P::K;
+    type DU = P::DU;
+    type DV = P::DV;
 
-    const T_HAT_LEN: usize = P::T_HAT_LEN;
+    type T_HAT_LEN = P::T_HAT_LEN;
     const MSB_BITMASK: u8 = P::MSB_BITMASK;
 }

@@ -2,6 +2,17 @@
 name = "kemeleon"
 version = "0.1.0"
 edition = "2021"
+description = """
+Kemeleon encoding algorithms for obfuscating ML-KEM handshake elements.
+"""
+authors = ["jmwample"]
+license = "MIT OR Apache-2.0"
+documentation = "https://docs.rs/kemeleon"
+repository = "https://github.com/jmwample/kemeleon"
+categories = ["no-std", "cryptography"]
+keywords = ["ML-KEM", "Kemeleon", "cryptography"]
+readme = "README.md"
+rust-version = "1.81"
 
 [package.metadata.docs.rs]
 rustdoc-args = [
@@ -10,7 +21,7 @@ rustdoc-args = [
 ]
 
 [features]
-default=["deterministic"]
+default=[]
 deterministic = ["ml-kem/deterministic"]
 alloc = []
 
@@ -18,11 +29,12 @@ alloc = []
 num-bigint = "0.4.6"
 rand = "0.8.5"
 ml-kem = { version="0.2.1" }
-hybrid-array = "0.2.0-rc.8"
+# hybrid-array = {version  = "0.2.0-rc.9", features=["extra-sizes"]} 
+# hybrid-array = {version  = "0.2.0-rc.9", features=["extra-sizes"], path = "/home/jmwample/svc/RustCrypto/hybrid-array" }
+hybrid-array = {version  = "0.2.0-rc.9", features=["extra-sizes"], git="https://github.com/RustCrypto/hybrid-array.git", branch="master"} 
 rand_core = "0.6.4"
 kem = "0.3.0-pre.0"
 lazy_static = "1.5.0"
-typenum = "1.17.0"
 
 # HKDF RNG
 digest = "0.10.7"

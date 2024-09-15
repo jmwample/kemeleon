@@ -13,6 +13,9 @@
   <a href="https://doc.rust-lang.org/1.6.0/complement-project-faq.html#why-dual-mitasl2-license">
     <img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-blue" alt="License: MIT/Apache 2.0">
   </a>
+  <a href="https://github.com/jmwample/kemeleon#minimum-supported-rust-version-msrv">
+    <img src="https://img.shields.io/badge/MSRV-1.81+-blue.svg" alt="MSRV 1.81">
+  </a>
 </p>
 
 This crates implements the kemeleon algorithms for secure obfuscation of ML-KEM
@@ -29,6 +32,12 @@ The implementation contained in this crate has never been independently audited!
 
 <h4><b>USE AT YOUR OWN RISK!</b></h4>
 </center>
+
+
+🚧  UNDER CONSTRUCTION  🚧
+This library is in a devloping (non-stable) condition, meaning that things will likely change. This includes
+API, interface, algorithms, etc. -- Feedback is welcome, but we do not guarantee support for any features /
+interface as currently implemented.
 
 ## Usage
 
@@ -65,17 +74,17 @@ all values are 12 bits, but always less than 3329.
 
 ## Minimum Supported Rust Version (MSRV)
 
-The Minimum Supported Rust Versions (MSRV) for this crate is **Rust 1.74**
-(currently forced by the [`ml_kem`](https://docs.rs/ml-kem/latest/ml_kem/) dependency).
+The Minimum Supported Rust Versions (MSRV) for this crate is **Rust 1.81**
+(currently forced by the [`hybrid-array`](https://docs.rs/hybrid-array) dependency).
 This minumum version will be ensured by the test and build steps in the CI pipeline.
 
 Going forward, the MSRV can be changed at any time, but it will be done with
 a minor version bump. We will not increase MSRV on PATCH releases, though
 downstream dependencies might.
 
-We won't increase MSRV just because we can: we'll only do so when we have a
-reason. (We don't guarantee that you'll agree with our reasoning; only that
-it will exist.)
+Once this crate reaches a stable state we won't increase MSRV just because we
+can: we'll only do so when we have a reason. (We don't guarantee that you'll agree
+with our reasoning; only that it will exist.)
 
 ## Roadmap
 
@@ -86,21 +95,27 @@ Core features
 - [x] Implement complete Encapsulation Key encoding / decoding
 - [x] Implement and test ciphertext encoding / decoding
 - [x] Pass on public docs
-- [x] Switch from using [`std::io::Error`] to a locally defined error type.
+- [x] Switch from using `std::io::Error` to a locally defined error type.
 - [x] Ciphertext encoding determinism using hkdf, hmac-drbg, or something similar
 - [x] Modify implementation to be `no-std` compatible
   - [x] Swap from custom error to &str error just for simplicity (`core::error::Error` is too new)
 - [x] GH actions for testing, building, linting, etc.
-- [ ] Use [`generic_array`](https://docs.rs/generic-array/latest/generic_array/) for
+- [x] Use [`hybrid-array`](https://docs.rs/hybrid-array/0.2.0-rc.9/hybrid_array/) for
   all type based generics requiring sized arrays
-  - [ ] Move const generics (`#![feature(generics_const_exprs)]`) to its own branch
+  - [x] Move const generics (`#![feature(generics_const_exprs)]`) to its own branch
     - const generics are an unstable feature, even though this is a very simple
       application of the feature it is bad practice to ask people use it in its current state.
-  - [ ] CI tests/builds for stable releases (const generics only work on nightly)
+  - [x] CI tests/builds for stable releases (const generics only work on nightly)
 - [ ] Nist vectors Integration tests
 
-Cleanup
+Cleanup -> Release 0.1.0-alpha
 
 - [ ] Polish public interface and docs for first release
 - [ ] Github actions release workflow
 
+Heading to Release 0.1.1-alpha
+
+- [ ] work up PR(s) for [ml-kem](https://docs.rs/ml-kem/latest/ml_kem/)
+  - [ ] expose internal things under a `dev` feature
+- [ ] remove as much repeated functionality as possible
+- [ ] revisit secure deterministic random byte generation

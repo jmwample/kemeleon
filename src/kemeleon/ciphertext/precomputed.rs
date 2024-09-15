@@ -1,12 +1,13 @@
 //! TODO: Document Use of Precomputed for re-randomizing U values
+use hybrid_array::ArraySize;
 use lazy_static::lazy_static;
 
-pub(crate) fn get_eq_set<const USIZE: usize>(u_i: u16) -> &'static [u16] {
-    if u_i > 2_u16.pow(USIZE as u32) {
+pub(crate) fn get_eq_set<Du: ArraySize>(u_i: u16) -> &'static [u16] {
+    if u_i > 2_u16.pow(Du::USIZE as u32) {
         return &[];
     }
 
-    match USIZE {
+    match Du::USIZE {
         10 => EQ_SET_10[u_i as usize],
         11 => EQ_SET_11[u_i as usize],
         _ => &[],
@@ -3095,12 +3096,11 @@ lazy_static! {
 
 #[cfg(test)]
 mod test {
+    use super::*;
     use crate::kemeleon::ciphertext::compress::*;
     use crate::{EncodingSize, FieldElement};
 
     use ml_kem::{MlKem1024, MlKem512, MlKem768};
-
-    use super::*;
 
     fn eq_set_completeness_test(desc: &str, eq_set: &[&[u16]]) {
         let mut s = Vec::new();
@@ -3128,16 +3128,12 @@ mod test {
         eq_set_completeness_test("du:11, [MlKem1024]", &EQ_SET_11[..]);
     }
 
-    fn eq_sets_match_test<D>(desc: &str)
-    where
-        D: EncodingSize,
-        [(); D::DU]:,
-    {
+    fn eq_sets_match_test<D: EncodingSize>(desc: &str) {
         for v in 0..FieldElement::Q {
             let mut compressed_v = v;
-            compressed_v.compress::<Du<{ D::DU }>>();
+            compressed_v.compress::<D::DU>();
 
-            let eq_set = get_eq_set::<{ D::DU }>(compressed_v);
+            let eq_set = get_eq_set::<D::DU>(compressed_v);
             assert!(
                 eq_set.to_vec().contains(&v),
                 "{desc}: {v} maps to incorrect set {eq_set:?}",
