@@ -1,5 +1,5 @@
 use kem::{Decapsulate, Encapsulate};
-use kemeleon::{Ciphertext, DecapsulationKey, EncapsulationKey, Encode, EncodeError, MlKem1024};
+use kemeleon::{Ciphertext, DecapsulationKey, EncapsulationKey, Encode, EncodeError};
 use rand::{CryptoRng, RngCore};
 use rand_core::CryptoRngCore;
 use x25519_dalek::{PublicKey, ReusableSecret};
@@ -26,8 +26,8 @@ impl core::fmt::Debug for HybridSharedSecret {
         write!(
             f,
             "{} {}",
-            hex::encode(&self.x25519),
-            hex::encode(&self.mlkem)
+            hex::encode(self.x25519),
+            hex::encode(self.mlkem)
         )
     }
 }
@@ -59,7 +59,7 @@ impl HybridKey {
     }
 }
 
-struct KeyMix<'a> {
+pub struct KeyMix<'a> {
     local_private: &'a HybridKey,
     remote_public: &'a HybridKeyPublic,
 }
@@ -119,7 +119,7 @@ fn main() {
     let alice_pub = alice_priv_key.public_key();
 
     let bob_priv_key = HybridKey::new(rng);
-    let (ct, bob_ss) = bob_priv_key.with_pub(&alice_pub).encapsulate(rng).unwrap();
+    let (ct, bob_ss) = bob_priv_key.with_pub(alice_pub).encapsulate(rng).unwrap();
 
     let alice_ss = alice_priv_key.decapsulate(&ct).unwrap();
     assert_eq!(alice_ss, bob_ss);
@@ -128,6 +128,7 @@ fn main() {
 #[cfg(test)]
 mod test {
     use super::*;
+    use kemeleon::MlKem1024;
 
     #[test]
     fn it_works() {
@@ -135,7 +136,7 @@ mod test {
 
         // --- Generate Keypair (Alice) ---
         // x25519
-        let alice_secret = EphemeralSecret::random_from_rng(&mut rng);
+        let alice_secret = ReusableSecret::random_from_rng(&mut rng);
         let alice_public = PublicKey::from(&alice_secret);
         // kyber
         let (alice_kyber_dk, alice_kyber_ek) = MlKem1024::generate(&mut rng);
@@ -150,7 +151,7 @@ mod test {
 
         // --- Generate Keypair (Bob) ---
         // x25519
-        let bob_secret = EphemeralSecret::random_from_rng(&mut rng);
+        let bob_secret = ReusableSecret::random_from_rng(&mut rng);
         let bob_public = PublicKey::from(&bob_secret);
 
         // (Imagine) upon receiving the kyberx25519 public key bob parses them
