@@ -122,7 +122,6 @@ mod test {
     use super::*;
     use kemeleon::MlKem1024;
 
-
     #[test]
     fn example_lib_usage() {
         let rng = &mut rand::thread_rng();
@@ -135,8 +134,6 @@ mod test {
         let alice_ss = alice_priv_key.decapsulate(&ct).unwrap();
         assert_eq!(alice_ss, bob_ss);
     }
-
-
 
     #[test]
     fn it_works() {
