@@ -114,21 +114,29 @@ impl Decapsulate<HybridCiphertext, HybridSharedSecret> for HybridKey {
 }
 
 fn main() {
-    let rng = &mut rand::thread_rng();
-    let alice_priv_key = HybridKey::new(rng);
-    let alice_pub = alice_priv_key.public_key();
-
-    let bob_priv_key = HybridKey::new(rng);
-    let (ct, bob_ss) = bob_priv_key.with_pub(alice_pub).encapsulate(rng).unwrap();
-
-    let alice_ss = alice_priv_key.decapsulate(&ct).unwrap();
-    assert_eq!(alice_ss, bob_ss);
+    println!("see package tests for example usage")
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
     use kemeleon::MlKem1024;
+
+
+    #[test]
+    fn example_lib_usage() {
+        let rng = &mut rand::thread_rng();
+        let alice_priv_key = HybridKey::new(rng);
+        let alice_pub = alice_priv_key.public_key();
+
+        let bob_priv_key = HybridKey::new(rng);
+        let (ct, bob_ss) = bob_priv_key.with_pub(alice_pub).encapsulate(rng).unwrap();
+
+        let alice_ss = alice_priv_key.decapsulate(&ct).unwrap();
+        assert_eq!(alice_ss, bob_ss);
+    }
+
+
 
     #[test]
     fn it_works() {
