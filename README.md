@@ -1,6 +1,12 @@
 # Kemeleon: Obfuscated ML-KEM Encodings
 
 <p>
+  <a href="https://crates.io/crates/kemeleon">
+    <img src="https://img.shields.io/crates/v/kemeleon.svg" alt="kemeleon crates.io">
+  </a>
+  <a href="https://docs.rs/kemeleon">
+    <img src="https://img.shields.io/docsrs/kemeleon" alt="kemeleon docs.rs">
+  </a>
   <a href="https://github.com/jmwample/kemeleon/actions/workflows/rust.yml">
     <img src="https://github.com/jmwample/kemeleon/actions/workflows/rust.yml/badge.svg?branch=main" alt="Build Status">
   </a>
@@ -108,12 +114,12 @@ Core features
   - [x] CI tests/builds for stable releases (const generics only work on nightly)
 - [ ] Nist vectors Integration tests
 
-Cleanup -> Release 0.1.0-alpha
+Cleanup -> Release 0.1.0
 
-- [ ] Polish public interface and docs for first release
+- [ ] Polish public interface and docs
 - [ ] Github actions release workflow
 
-Heading to Release 0.1.1-alpha
+Heading to Release 0.1.1
 
 - [ ] work up PR(s) for [ml-kem](https://docs.rs/ml-kem/latest/ml_kem/)
   - [ ] expose internal things under a `dev` feature
