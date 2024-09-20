@@ -132,7 +132,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{mlkem::Kemx, ByteArr, FieldElement, ARR_LEN};
+    use crate::{mlkem::Kemx, ByteArr, FieldElement, OKemCore, ARR_LEN};
     use ml_kem::{Encoded, MlKem1024, MlKem512, MlKem768};
     use num_bigint::BigUint;
 

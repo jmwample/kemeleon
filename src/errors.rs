@@ -29,6 +29,19 @@ pub enum EncodeError {
     DecapsulationError,
     /// The provided buffer is insufficient
     DstBufError(Internal),
+    /// Encapsulation Key is Not Encodable
+    ///
+    /// Only used in contexts where not being encodable makes something fallible.
+    NotEncodable, // /// Encapsulation Key is Not Encodable
+                  // ///
+                  // /// Only used in contexts where not being encodable makes something fallible.
+                  // /// Still contains the resulting Encapsulation Key object in case you wish to ignore this error.
+                  // EKNotEncodable<P>(EncapsulationKey<P>),
+                  // /// Ciphertext is Not Encodable
+                  // ///
+                  // /// Only used in contexts where not being encodable makes something fallible.
+                  // /// Still contains the resulting Ciphertext object in case you wish to ignore this error.
+                  // CTNotEncodable<P>(Ciphertext<P>),
 }
 
 impl core::error::Error for EncodeError {}
@@ -42,6 +55,9 @@ impl core::fmt::Display for EncodeError {
             EncodeError::BadRngSource => write!(f, "{BAD_RNG}"),
             EncodeError::MlKemError(e) => write!(f, "ml_kem error: {e}"),
             EncodeError::DstBufError(e) => write!(f, "dst buffer issue: {e}"),
+            EncodeError::NotEncodable => write!(f, "object is not encodable using kemeleon"),
+            // EncodeError::EKNotEncodable(_) => write!(f, "encapsulation key is not encodable"),
+            // EncodeError::CTNotEncodable(_) => write!(f, "ciphertext is not encodable"),
         }
     }
 }

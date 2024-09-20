@@ -67,7 +67,6 @@ where
         ss: &ml_kem::SharedKey<P>,
     ) -> Result<(bool, Self), EncodeError> {
         let mut kemeleon_ct = Self {
-            encoded: false,
             bytes: ByteArr::zero::<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>(),
             fips: fips_ct.clone(),
         };
@@ -86,7 +85,6 @@ where
         rng: &mut R,
     ) -> Result<(bool, Self), EncodeError> {
         let mut kemeleon_ct = Self {
-            encoded: false,
             bytes: ByteArr::zero::<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>(),
             fips: fips_ct.clone(),
         };
@@ -141,7 +139,6 @@ where
             ml_kem::Ciphertext::<P>::try_from(&fips_ct[..]).map_err(EncodeError::MlKemError)?;
 
         Ok(Self {
-            encoded: true,
             bytes: ct_bytes,
             fips,
         })
@@ -211,7 +208,10 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::mlkem::{KCiphertext, KEncodedCiphertext, Kemx, MAX_RETRIES};
+    use crate::{
+        mlkem::{KCiphertext, KEncodedCiphertext, Kemx, MAX_RETRIES},
+        OKemCore,
+    };
 
     use kem::{Decapsulate, Encapsulate};
     use ml_kem::{MlKem1024, MlKem512, MlKem768};

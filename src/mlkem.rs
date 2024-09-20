@@ -1,6 +1,6 @@
 use crate::{
     fips, kemeleon::Encodable, Encode, EncodeError, EncodingSize, FipsByteArraySize,
-    FipsEncodingSize, KemeleonByteArraySize, NttArray, Transcode,
+    FipsEncodingSize, KemeleonByteArraySize, NttArray, OKemCore, Transcode,
 };
 
 use core::{fmt::Debug, marker::PhantomData};
@@ -19,7 +19,7 @@ use rand_core::CryptoRngCore;
 /// Number of retries to generate a key pair that satisfies the Kemeleon criteria.
 pub(crate) const MAX_RETRIES: usize = 64;
 
-#[derive(Debug, PartialEq, PartialOrd)]
+// #[derive(Debug, PartialEq, PartialOrd)]
 pub struct Kemx<P>
 where
     P: ml_kem::KemCore,
@@ -31,7 +31,7 @@ impl<P> Kemx<P>
 where
     P: ml_kem::KemCore + FipsByteArraySize + KemeleonByteArraySize,
 {
-    pub fn generate(rng: &mut impl CryptoRngCore) -> (KDecapsulationKey<P>, KEncapsulationKey<P>) {
+    fn generate_priv(rng: &mut impl CryptoRngCore) -> (KDecapsulationKey<P>, KEncapsulationKey<P>) {
         // random u8 for the most significant byte which will be less than 8 bits.
         let msb_rand = rng.next_u32() as u8;
 
@@ -50,6 +50,64 @@ where
         }
         panic!("failed to generate key - you have a bad random number generator")
     }
+
+    fn try_generate_priv(
+        rng: &mut impl CryptoRngCore,
+    ) -> (
+        (KDecapsulationKey<P>, KEncapsulationKey<P>),
+        Result<(), EncodeError>,
+    ) {
+        let msb_rand = rng.next_u32() as u8;
+
+        let (dk, ek) = P::generate(rng);
+        let encap_key = KEncapsulationKey::<P> {
+            key: ek,
+            byte: msb_rand,
+        };
+
+        let decap_key = KDecapsulationKey::<P>(dk);
+        if encap_key.is_encodable() {
+            ((decap_key, encap_key), Ok(()))
+        } else {
+            ((decap_key, encap_key), Err(EncodeError::NotEncodable))
+        }
+    }
+}
+
+impl<P> OKemCore for Kemx<P>
+where
+    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+{
+    type OkemError = EncodeError;
+
+    type SharedKeySize = <P as KemCore>::SharedKeySize;
+    type SharedKey = SharedKey<P>;
+
+    type Ciphertext = KEncodedCiphertext<P>;
+    type CiphertextSize = <Self as KemeleonByteArraySize>::ENCODED_CT_SIZE;
+
+    type DecapsulationKey = KDecapsulationKey<P>;
+
+    type EncapsulationKey = KEncapsulationKey<P>;
+
+    fn generate(rng: &mut impl CryptoRngCore) -> (KDecapsulationKey<P>, KEncapsulationKey<P>) {
+        Self::generate_priv(rng)
+    }
+
+    fn try_generate(
+        rng: &mut impl CryptoRngCore,
+    ) -> Result<(KDecapsulationKey<P>, KEncapsulationKey<P>), EncodeError> {
+        match Self::try_generate_priv(rng) {
+            (ekdk, Ok(())) => Ok(ekdk),
+            (_, Err(e)) => Err(e),
+        }
+    }
+
+    #[cfg(feature = "deterministic")]
+    fn generate_deterministic(d: &B32, z: &B32) -> (KDecapsulationKey<P>, KEncapsulationKey<P>) {
+        let (dk, ek) = <P as KemCore>::generate_deterministic(d, z);
+        (KDecapsulationKey(dk), KEncapsulationKey::from_fips(ek))
+    }
 }
 
 // ========================================================================== //
@@ -61,13 +119,22 @@ where
 // more than once).
 /// An `EncapsulationKey` provides the ability to encapsulate a shared key so that
 /// it can only be decapsulated by the holder of the corresponding decapsulation key.
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, PartialOrd)]
 pub struct KEncapsulationKey<P>
 where
     P: KemCore + FipsByteArraySize,
 {
     pub(crate) key: P::EncapsulationKey,
     pub(crate) byte: u8,
+}
+
+impl<P> PartialEq for KEncapsulationKey<P>
+where
+    P: KemCore + FipsByteArraySize,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key && self.byte == other.byte
+    }
 }
 
 impl<P> KEncapsulationKey<P>
@@ -180,14 +247,24 @@ where
 // ========================================================================== //
 
 /// A ciphertext produced by the KEM `K`
-#[derive(Debug, PartialEq, PartialOrd)]
 pub struct KCiphertext<P>
 where
     P: KemCore + KemeleonByteArraySize,
 {
-    pub(crate) encoded: bool,
     pub(crate) bytes: Array<u8, P::ENCODED_CT_SIZE>,
     pub(crate) fips: Ciphertext<P>,
+}
+
+impl<P> core::fmt::Debug for KCiphertext<P>
+where
+    P: KemCore + KemeleonByteArraySize,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Ciphertext")
+            .field("fips", &hex::encode(&self.fips))
+            .field("kmln", &hex::encode(&self.bytes))
+            .finish()
+    }
 }
 
 pub struct KEncodedCiphertext<P>(pub(crate) Array<u8, P::ENCODED_CT_SIZE>)
@@ -200,6 +277,24 @@ where
 {
     fn as_ref(&self) -> &[u8] {
         &self.0
+    }
+}
+
+impl<P> PartialEq for KEncodedCiphertext<P>
+where
+    P: KemCore + KemeleonByteArraySize,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<P> core::fmt::Debug for KEncodedCiphertext<P>
+where
+    P: KemCore + KemeleonByteArraySize,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", hex::encode(&self.0))
     }
 }
 
@@ -444,7 +539,7 @@ mod test {
     #[test]
     fn coverage() {
         coverage_trial::<MlKem512>();
-        // coverage_trial::<MlKem768>();
-        // coverage_trial::<MlKem1024>();
+        coverage_trial::<MlKem768>();
+        coverage_trial::<MlKem1024>();
     }
 }

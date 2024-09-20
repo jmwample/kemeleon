@@ -1,5 +1,5 @@
 use kem::{Decapsulate, Encapsulate};
-use kemeleon::{Ciphertext, DecapsulationKey, EncapsulationKey, Encode, EncodeError};
+use kemeleon::{Ciphertext, DecapsulationKey, EncapsulationKey, Encode, EncodeError, OKemCore};
 use rand::{CryptoRng, RngCore};
 use rand_core::CryptoRngCore;
 use x25519_dalek::{PublicKey, ReusableSecret};

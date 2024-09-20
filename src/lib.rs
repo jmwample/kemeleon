@@ -31,6 +31,9 @@ use hybrid_array::{
     Array, ArraySize,
 };
 
+#[cfg(feature = "deterministic")]
+use ml_kem::{EncapsulateDeterministic, B32};
+
 #[derive(Copy, Clone, Default, PartialEq, PartialOrd)]
 pub(crate) struct FieldElement(pub u16);
 
@@ -121,22 +124,41 @@ pub trait Transcode {
 /// $$
 ///
 #[allow(non_camel_case_types)]
+#[rustfmt::skip]
 pub trait EncodingSize {
     /// Number of bits used to represent field elements
     type USIZE: ArraySize;
 
     /// Number of field elements per equation.
-    type K: ArraySize;
+    type K: ArraySize
+        // allows:  (K * 384) + RHO_LEN
+        + Mul<U384, Output: ArraySize + Add<RHO_LEN, Output: ArraySize>>
+        // allows: K * Du
+        + Mul< Self::DU, Output: ArraySize
+            // Allows: K * Du * 32
+            + Mul< U32, Output: ArraySize
+                // Allows: (K * Du * 32) + RHO_LEN
+                + Add<RHO_LEN, Output: ArraySize>
+                // Allows: (K * Du * 32) + (Dv * 32)
+                + Add<<Self::DV as Mul<U32>>::Output, Output: ArraySize>,
+            >,
+        >;
 
     /// The bit width of encoded integers in the `u` vector in a ciphertext
     type DU: ArraySize;
     /// The bit width of encoded integers in the `v` vector in a ciphertext
-    type DV: ArraySize;
+    type DV: ArraySize
+        // Allows: Dv * 32
+        + Mul<U32, Output: ArraySize>;
 
     /// Number of bytes for just `t_hat` values in a kemeleon encoded value
     ///
     /// Computed as: $\left\lceil (HIGH\\_ORDER\\_BIT -1)/8 \right\rceil$
-    type T_HAT_LEN: ArraySize;
+    type T_HAT_LEN: ArraySize
+        // Allows: t_hat_len + RHO_LEN
+        + Add<RHO_LEN, Output: ArraySize>
+        // Allows: t_hat_len + (Dv * 32)
+        + Add<<Self::DV as Mul<U32>>::Output, Output: ArraySize>;
 
     /// Bitmask for the high order byte which will be less than a full byte of
     /// random bits when encoded.
@@ -156,29 +178,15 @@ pub trait EncodingSize {
 #[allow(non_camel_case_types)]
 pub trait FipsEncodingSize: EncodingSize {
     /// Length of an NTT Vector encoded and compressed
-    type FIPS_T_HAT_LEN: ArraySize;
+    type FIPS_T_HAT_LEN: ArraySize + Add<RHO_LEN, Output: ArraySize>;
 
     /// Size of the compressed U element of an ML-KEM ciphertext. $Du * K * 256 / 8$
-    type FIPS_ENCODED_USIZE: ArraySize;
+    type FIPS_ENCODED_USIZE: ArraySize + Add<Self::FIPS_ENCODED_VSIZE, Output: ArraySize>;
     /// Size of the compressed V element of an ML-KEM ciphertext. $Dv * 256 / 8$
     type FIPS_ENCODED_VSIZE: ArraySize;
 }
 
-impl<T: EncodingSize> FipsEncodingSize for T
-where
-    <T as EncodingSize>::K: Mul<U384>,
-    <<T as EncodingSize>::K as Mul<U384>>::Output: ArraySize,
-
-    <T as EncodingSize>::DV: Mul<U32>,
-    <<T as EncodingSize>::DV as Mul<U32>>::Output: ArraySize,
-
-    <T as EncodingSize>::K: Mul<<T as EncodingSize>::DU>,
-    <<T as EncodingSize>::K as Mul<<T as EncodingSize>::DU>>::Output: ArraySize,
-
-    <<T as EncodingSize>::K as Mul<<T as EncodingSize>::DU>>::Output: Mul<U32>,
-    <<<T as EncodingSize>::K as Mul<<T as EncodingSize>::DU>>::Output as Mul<U32>>::Output:
-        ArraySize,
-{
+impl<T: EncodingSize> FipsEncodingSize for T {
     type FIPS_T_HAT_LEN = Prod<Self::K, U384>;
     type FIPS_ENCODED_USIZE = Prod<Prod<T::K, T::DU>, U32>;
     type FIPS_ENCODED_VSIZE = Prod<T::DV, U32>;
@@ -194,16 +202,7 @@ pub trait FipsByteArraySize: FipsEncodingSize {
     type ENCODED_CT_SIZE: ArraySize;
 }
 
-impl<T: FipsEncodingSize> FipsByteArraySize for T
-where
-    <T as FipsEncodingSize>::FIPS_ENCODED_USIZE: Add<<T as FipsEncodingSize>::FIPS_ENCODED_VSIZE>,
-    <<T as FipsEncodingSize>::FIPS_ENCODED_USIZE as Add<
-        <T as FipsEncodingSize>::FIPS_ENCODED_VSIZE,
-    >>::Output: ArraySize,
-
-    <T as FipsEncodingSize>::FIPS_T_HAT_LEN: Add<RHO_LEN>,
-    <<T as FipsEncodingSize>::FIPS_T_HAT_LEN as Add<RHO_LEN>>::Output: ArraySize,
-{
+impl<T: EncodingSize + FipsEncodingSize> FipsByteArraySize for T {
     type ENCODED_EK_SIZE = Sum<T::FIPS_T_HAT_LEN, RHO_LEN>;
     type ENCODED_CT_SIZE = Sum<T::FIPS_ENCODED_USIZE, T::FIPS_ENCODED_VSIZE>;
 }
@@ -216,18 +215,15 @@ where
 #[allow(non_camel_case_types)]
 pub trait KemeleonEncodingSize: EncodingSize {
     /// Size of the U value of the kemeleon encoded ciphertext. Matches `T_HAT_LEN`.
-    type ENCODED_USIZE: ArraySize;
+    type ENCODED_USIZE: ArraySize + Add<Self::ENCODED_VSIZE, Output: ArraySize>;
+
     #[allow(clippy::doc_markdown)]
     /// Size of the V value of the Kemeleon encoded ciphertext. N values of Dv Bit size.
     /// The number of bytes is computed as $ ENCODED_VSIZE = n * D_v / 8 \text{ --- for } n=256 $
     type ENCODED_VSIZE: ArraySize;
 }
 
-impl<T: EncodingSize> KemeleonEncodingSize for T
-where
-    <T as EncodingSize>::DV: Mul<U32>,
-    <<T as EncodingSize>::DV as Mul<U32>>::Output: ArraySize,
-{
+impl<T: EncodingSize> KemeleonEncodingSize for T {
     type ENCODED_USIZE = T::T_HAT_LEN;
     type ENCODED_VSIZE = Prod<Self::DV, U32>;
 }
@@ -244,18 +240,9 @@ pub trait KemeleonByteArraySize: KemeleonEncodingSize {
     type ENCODED_CT_SIZE: ArraySize;
 }
 
-impl<T: KemeleonEncodingSize> KemeleonByteArraySize for T
-where
-    <T as KemeleonEncodingSize>::ENCODED_VSIZE: Add<<T as KemeleonEncodingSize>::ENCODED_USIZE>,
-    <<T as KemeleonEncodingSize>::ENCODED_VSIZE as Add<
-        <T as KemeleonEncodingSize>::ENCODED_USIZE,
-    >>::Output: ArraySize,
-
-    <T as EncodingSize>::T_HAT_LEN: Add<RHO_LEN>,
-    <<T as EncodingSize>::T_HAT_LEN as Add<RHO_LEN>>::Output: ArraySize,
-{
+impl<T: KemeleonEncodingSize> KemeleonByteArraySize for T {
     type ENCODED_EK_SIZE = Sum<T::T_HAT_LEN, RHO_LEN>;
-    type ENCODED_CT_SIZE = Sum<T::ENCODED_VSIZE, T::ENCODED_USIZE>;
+    type ENCODED_CT_SIZE = Sum<T::ENCODED_USIZE, T::ENCODED_VSIZE>;
 }
 
 // ========================================================================== //
@@ -309,7 +296,6 @@ impl<P> EncodingSize for mlkem::Kemx<P>
 where
     P: ml_kem::KemCore + EncodingSize,
 {
-    //_1011_1001_0100
     type USIZE = P::USIZE;
     type K = P::K;
     type DU = P::DU;
@@ -317,4 +303,52 @@ where
 
     type T_HAT_LEN = P::T_HAT_LEN;
     const MSB_BITMASK: u8 = P::MSB_BITMASK;
+}
+
+use kem::{Decapsulate, Encapsulate};
+use rand_core::CryptoRngCore;
+
+/// A generic interface to an Obfuscated Key Encapsulation Method
+pub trait OKemCore {
+    /// The size of a shared key generated by this KEM
+    type SharedKeySize: ArraySize;
+
+    /// The shared key type generated by this KEM
+    type SharedKey: Debug + PartialEq;
+
+    /// The size of a Kemeleon encoded ciphertext encapsulating a shared key
+    type CiphertextSize: ArraySize;
+
+    /// The ciphertext type encapsulating a shared key
+    type Ciphertext: Debug + PartialEq;
+
+    /// A decapsulation key for this KEM
+    type DecapsulationKey: Decapsulate<Self::Ciphertext, Self::SharedKey>;
+
+    /// Error type retuned by fallible fns
+    type OkemError: core::error::Error;
+
+    /// An encapsulation key for this KEM
+    #[cfg(not(feature = "deterministic"))]
+    type EncapsulationKey: Encapsulate<Self::Ciphertext, Self::SharedKey>;
+
+    /// A deterministic encapsulation key for this KEM
+    #[cfg(feature = "deterministic")]
+    type EncapsulationKey: Encapsulate<Self::Ciphertext, Self::SharedKey>
+        + EncapsulateDeterministic<Self::Ciphertext, Self::SharedKey>;
+
+    /// Generate a new encodable (decapsulation, encapsulation) key pair
+    fn generate(rng: &mut impl CryptoRngCore) -> (Self::DecapsulationKey, Self::EncapsulationKey);
+
+    /// Generate a new (decapsulation, encapsulation) key pair
+    ///
+    /// Returns an error if the first key generated is not encodable.
+    fn try_generate(
+        rng: &mut impl CryptoRngCore,
+    ) -> Result<(Self::DecapsulationKey, Self::EncapsulationKey), Self::OkemError>;
+
+    /// Generate a new (decapsulation, encapsulation) key pair deterministically
+    #[cfg(feature = "deterministic")]
+    fn generate_deterministic(d: &B32, z: &B32)
+        -> (Self::DecapsulationKey, Self::EncapsulationKey);
 }
