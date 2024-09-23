@@ -19,7 +19,7 @@ use rand_core::CryptoRngCore;
 /// Number of retries to generate a key pair that satisfies the Kemeleon criteria.
 pub(crate) const MAX_RETRIES: usize = 64;
 
-// #[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Clone)]
 pub struct Kemx<P>
 where
     P: ml_kem::KemCore,
@@ -126,6 +126,20 @@ where
 {
     pub(crate) key: P::EncapsulationKey,
     pub(crate) byte: u8,
+}
+
+impl<P> Clone for KEncapsulationKey<P>
+where
+    P: KemCore + FipsByteArraySize,
+{
+    fn clone(&self) -> Self {
+        let k = P::EncapsulationKey::from_bytes(&self.key.as_bytes());
+
+        KEncapsulationKey {
+            byte: self.byte,
+            key: k,
+        }
+    }
 }
 
 impl<P> PartialEq for KEncapsulationKey<P>
