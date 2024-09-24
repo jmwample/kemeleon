@@ -119,7 +119,7 @@ where
 // more than once).
 /// An `EncapsulationKey` provides the ability to encapsulate a shared key so that
 /// it can only be decapsulated by the holder of the corresponding decapsulation key.
-#[derive(Debug, PartialOrd)]
+#[derive(Copy, Debug, PartialOrd)]
 pub struct KEncapsulationKey<P>
 where
     P: KemCore + FipsByteArraySize,
