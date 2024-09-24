@@ -1,5 +1,5 @@
 use crate::{
-    fips, kemeleon::Encodable, Encode, EncodeError, EncodingSize, FipsByteArraySize,
+    fips, kemeleon::Encodable, ByteArray, Encode, EncodeError, EncodingSize, FipsByteArraySize,
     FipsEncodingSize, KemeleonByteArraySize, NttArray, OKemCore, Transcode,
 };
 
@@ -373,7 +373,8 @@ where
 // Decapsulation Key
 // ========================================================================== //
 
-/// A `DecapsulationKey` provides the ability to generate a new key pair, and decapsulate an encapsulated shared key.
+/// A `DecapsulationKey` is the secret portion of a keypari that allows the holder to
+/// reveal a value encapsulated using the associated encapsulation key.
 #[derive(Debug, PartialEq, PartialOrd)]
 pub struct KDecapsulationKey<P>(P::DecapsulationKey)
 where
@@ -431,6 +432,25 @@ impl<P: KemCore + EncodingSize + FipsEncodingSize> KDecapsulationKey<P> {
 
         Ok(KDecapsulationKey(fips_key))
     }
+
+    /// Returns the Decapsulation Key as bytes in the FIPS representtation for serializing
+    /// and deserializing.
+    pub fn to_fips_bytes(
+        &self,
+    ) -> ByteArray<<<P as ml_kem::KemCore>::DecapsulationKey as ml_kem::EncodedSizeUser>::EncodedSize>
+    {
+        self.0.as_bytes()
+    }
+
+    // pub fn encapsulation_key(&self) -> KEncapsulationKey<P> {
+    //     KEncapsulationKey {
+    //         key: self.0.encapsulation_key(),
+    //         byte: 0u8, // TODO XXX: this makes the Encapsulation key byte always 0 -> how do we
+    //                    // store the random byte when writing the decapsulation key out such that
+    //                    // it can be parsed from file and the same encapsulation key can be
+    //                    // recovered?
+    //     }
+    // }
 }
 
 impl<P> EncodedSizeUser for KDecapsulationKey<P>
