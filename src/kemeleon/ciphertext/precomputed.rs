@@ -16,6 +16,7 @@ pub(crate) fn get_eq_set<Du: ArraySize>(u_i: u16) -> &'static [u16] {
 
 // Precpmpute compress/decompress equivalency sets
 lazy_static! {
+    #[allow(clippy::large_stack_arrays)]
     pub(crate) static ref EQ_SET_10: [&'static [u16]; 1024] = [
         &[0, 1, 3328][..],
         &[2, 3, 4][..],
