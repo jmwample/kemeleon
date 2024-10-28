@@ -78,6 +78,10 @@ The wire format of the encapsulation key is trivially distinguishable from unifo
 random becuase they values are 12 bit values where all are computed mod Q. Thus
 all values are 12 bits, but always less than 3329.
 
+<div>
+ <img style="display: block; margin-left: auto; margin-right: auto; width: 60%;" src="doc/kyber_rfc_dist.png" alt="ML-KEM768 byte Frequency">
+</div>
+
 ## Minimum Supported Rust Version (MSRV)
 
 The Minimum Supported Rust Versions (MSRV) for this crate is **Rust 1.81**

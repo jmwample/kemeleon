@@ -15,6 +15,9 @@ pub(crate) fn get_eq_set<Du: ArraySize>(u_i: u16) -> &'static [u16] {
 }
 
 // Precpmpute compress/decompress equivalency sets
+//
+// Due to the variable sizes these cannot be created as const, however they should
+// be treated as such.
 lazy_static! {
     #[allow(clippy::large_stack_arrays)]
     pub(crate) static ref EQ_SET_10: [&'static [u16]; 1024] = [
@@ -1043,6 +1046,8 @@ lazy_static! {
         &[3321, 3322, 3323, 3324][..],
         &[3325, 3326, 3327][..]
     ];
+
+    #[allow(clippy::large_stack_arrays)]
     pub(crate) static ref EQ_SET_11: [&'static [u16]; 2048] = [
         &[0_u16][..],
         &[1, 2][..],
