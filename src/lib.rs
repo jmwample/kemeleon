@@ -3,6 +3,7 @@
 #![warn(clippy::pedantic)] // Be pedantic by default
 #![warn(clippy::integer_division_remainder_used)] // Be judicious about using `/` and `%`
 #![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::large_stack_arrays)]
 // do not warn about downcasting
 #![deny(missing_docs)] // Require all public interfaces to be documented
 #![allow(clippy::missing_errors_doc)] // adding Errors section is more than I want to do
