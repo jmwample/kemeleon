@@ -22,6 +22,7 @@ mod mlkem;
 
 pub use errors::*;
 pub use kemeleon::*;
+pub mod xwing;
 
 use hybrid_array::{
     sizes::{U1124, U1498, U749},
