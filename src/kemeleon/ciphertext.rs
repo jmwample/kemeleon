@@ -26,6 +26,27 @@ pub use crate::mlkem::KCiphertext as Ciphertext;
 #[allow(clippy::module_name_repetitions)]
 pub use crate::mlkem::KEncodedCiphertext as EncodedCiphertext;
 
+impl<P> Encode for Ciphertext<P>
+where
+    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+{
+    /// Encoded Cuphertext Type
+    type ET = ByteArray<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>;
+
+    /// Error Type returned on failed decode
+    type Error = EncodeError;
+
+    fn as_bytes(&self) -> Self::ET {
+        EncodedCiphertext::<P>::from(self).as_bytes()
+    }
+
+    fn try_from_bytes(b: impl AsRef<[u8]>) -> Result<Self, Self::Error> {
+        let ec = EncodedCiphertext::<P>::try_from_bytes(b)?;
+        Ok(Self::from(ec))
+    }
+}
+
+
 impl<P> Encode for EncodedCiphertext<P>
 where
     P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
