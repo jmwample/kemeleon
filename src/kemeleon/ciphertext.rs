@@ -1,7 +1,7 @@
-use super::{vector_decode, vector_encode, Encode};
+use super::{vector_decode, vector_encode};
 use crate::{
-    fips, ByteArr, ByteArray, EncodeError, FieldElement, FipsByteArraySize, FipsEncodingSize,
-    KemeleonByteArraySize, KemeleonEncodingSize, Ntt,
+    fips, ByteArr, ByteArray, Encode, EncodeError, FieldElement, FipsByteArraySize,
+    FipsEncodingSize, KemeleonByteArraySize, KemeleonEncodingSize, Ntt,
 };
 
 use hybrid_array::ArraySize;
@@ -16,7 +16,7 @@ mod precomputed;
 use precomputed::get_eq_set;
 mod hkdf_rng;
 use hkdf_rng::HkdfRng;
-use hybrid_array::typenum::Unsigned;
+use hybrid_array::{typenum::Unsigned, Array};
 
 // ========================================================================== //
 // CipherText
@@ -30,19 +30,18 @@ impl<P> Encode for EncodedCiphertext<P>
 where
     P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
 {
-    /// Encoded Cuphertext Type
-    type ET = ByteArray<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>;
+    type EncodedSize = <P as KemeleonByteArraySize>::ENCODED_CT_SIZE;
 
     /// Error Type returned on failed decode
     type Error = EncodeError;
 
-    fn as_bytes(&self) -> Self::ET {
+    fn as_bytes(&self) -> Array<u8, <Self as Encode>::EncodedSize> {
         self.0.clone()
     }
 
-    fn try_from_bytes(b: impl AsRef<[u8]>) -> Result<Self, Self::Error> {
+    fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, <Self as Encode>::Error> {
         let ct_len = <P as KemeleonByteArraySize>::ENCODED_CT_SIZE::USIZE;
-        let arr = &b.as_ref();
+        let arr = &buf.as_ref();
 
         if arr.is_empty() {
             return Err(EncodeError::invalid_ctxt_len(0_usize));

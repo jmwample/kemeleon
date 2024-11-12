@@ -4,7 +4,7 @@ use crate::{
     RHO_LEN,
 };
 
-use hybrid_array::typenum::Unsigned;
+use hybrid_array::{typenum::Unsigned, Array};
 use ml_kem::{EncodedSizeUser, KemCore};
 
 // ========================================================================== //
@@ -15,8 +15,8 @@ impl<P> Encode for EncapsulationKey<P>
 where
     P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
 {
-    type ET = ByteArray<<P as KemeleonByteArraySize>::ENCODED_EK_SIZE>;
     type Error = EncodeError;
+    type EncodedSize = <P as KemeleonByteArraySize>::ENCODED_EK_SIZE;
 
     /// In this formulation a is 1 indexed (as oposed to being 0 indexed)
     ///
@@ -31,8 +31,8 @@ where
     /// The intuition here is to accumulate (sum) the integer coefficients,
     /// resulting in a single larger integer whose intermediary bits are no longer
     /// biased.
-    fn as_bytes(&self) -> Self::ET {
-        let mut dst = Self::ET::from_fn(|_| 0u8);
+    fn as_bytes(&self) -> Array<u8, Self::EncodedSize> {
+        let mut dst = Array::<u8, Self::EncodedSize>::from_fn(|_| 0u8);
         // we know there will be no size error and we know the key will be encodable
         // so we do not need the result.
         let _ = self.encode_priv(&mut dst);
@@ -48,8 +48,8 @@ where
     ///     3     a[𝑖] ← ( 𝑟− sum(𝑗=1, 𝑖−1, 𝑝𝑘 [𝑗]) ) / ( 𝑞^(𝑖−1) ) mod 𝑞
     ///     4 return a
     /// ```
-    fn try_from_bytes(c: impl AsRef<[u8]>) -> Result<Self, Self::Error> {
-        EncapsulationKey::<P>::decode_priv(c.as_ref())
+    fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, <Self as Encode>::Error> {
+        EncapsulationKey::<P>::decode_priv(buf.as_ref())
     }
 }
 

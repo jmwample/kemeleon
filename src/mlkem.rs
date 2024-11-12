@@ -83,11 +83,12 @@ where
     type SharedKeySize = <P as KemCore>::SharedKeySize;
     type SharedKey = SharedKey<P>;
 
+    type CiphertextSize = <P as KemeleonByteArraySize>::ENCODED_CT_SIZE;
     type Ciphertext = KEncodedCiphertext<P>;
-    type CiphertextSize = <Self as KemeleonByteArraySize>::ENCODED_CT_SIZE;
 
     type DecapsulationKey = KDecapsulationKey<P>;
 
+    type EncapsulationKeySize = <P as KemeleonByteArraySize>::ENCODED_EK_SIZE;
     type EncapsulationKey = KEncapsulationKey<P>;
 
     fn generate(rng: &mut impl CryptoRngCore) -> (KDecapsulationKey<P>, KEncapsulationKey<P>) {
