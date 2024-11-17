@@ -1,15 +1,13 @@
 use crate::{
-    fips, kemeleon::Encodable, ByteArray, Encode, EncodeError, EncodingSize, FipsByteArraySize,
+    fips, kemeleon::Encodable, ByteArray, Canonical, EncodeError, EncodingSize, FipsByteArraySize,
     FipsEncodingSize, KemeleonByteArraySize, NttArray, OKemCore, Transcode,
 };
 
 use core::{fmt::Debug, marker::PhantomData};
 
-use hybrid_array::Array;
+use hybrid_array::{typenum::Unsigned, Array};
 use kem::{Decapsulate, Encapsulate};
 use ml_kem::{Ciphertext, Encoded, EncodedSizeUser, KemCore, SharedKey};
-#[cfg(feature = "deterministic")]
-use ml_kem::{EncapsulateDeterministic, B32};
 use rand_core::CryptoRngCore;
 
 // ========================================================================== //
@@ -80,15 +78,12 @@ where
 {
     type OkemError = EncodeError;
 
-    type SharedKeySize = <P as KemCore>::SharedKeySize;
     type SharedKey = SharedKey<P>;
 
-    type CiphertextSize = <P as KemeleonByteArraySize>::ENCODED_CT_SIZE;
     type Ciphertext = KEncodedCiphertext<P>;
 
     type DecapsulationKey = KDecapsulationKey<P>;
 
-    type EncapsulationKeySize = <P as KemeleonByteArraySize>::ENCODED_EK_SIZE;
     type EncapsulationKey = KEncapsulationKey<P>;
 
     fn generate(rng: &mut impl CryptoRngCore) -> (KDecapsulationKey<P>, KEncapsulationKey<P>) {
@@ -104,10 +99,8 @@ where
         }
     }
 
-    #[cfg(feature = "deterministic")]
-    fn generate_deterministic(d: &B32, z: &B32) -> (KDecapsulationKey<P>, KEncapsulationKey<P>) {
-        let (dk, ek) = <P as KemCore>::generate_deterministic(d, z);
-        (KDecapsulationKey(dk), KEncapsulationKey::from_fips(ek))
+    fn encapsulation_key(dk: &Self::DecapsulationKey) -> Self::EncapsulationKey {
+        todo!("");
     }
 }
 
@@ -120,19 +113,13 @@ where
 // more than once).
 /// An `EncapsulationKey` provides the ability to encapsulate a shared key so that
 /// it can only be decapsulated by the holder of the corresponding decapsulation key.
-#[derive(Copy, Debug, PartialOrd)]
-pub struct KEncapsulationKey<P>
-where
-    P: KemCore + FipsByteArraySize,
-{
+#[derive(PartialOrd)]
+pub struct KEncapsulationKey<P: KemCore> {
     pub(crate) key: P::EncapsulationKey,
     pub(crate) byte: u8,
 }
 
-impl<P> Clone for KEncapsulationKey<P>
-where
-    P: KemCore + FipsByteArraySize,
-{
+impl<P: KemCore> Clone for KEncapsulationKey<P> {
     fn clone(&self) -> Self {
         let k = P::EncapsulationKey::from_bytes(&self.key.as_bytes());
 
@@ -143,10 +130,16 @@ where
     }
 }
 
-impl<P> PartialEq for KEncapsulationKey<P>
-where
-    P: KemCore + FipsByteArraySize,
-{
+impl<P: KemCore> core::fmt::Debug for KEncapsulationKey<P> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("EncapsulationKey")
+            .field("ml_kem_key", &self.key)
+            .field("upper_mask", &self.byte)
+            .finish()
+    }
+}
+
+impl<P: KemCore> PartialEq for KEncapsulationKey<P> {
     fn eq(&self, other: &Self) -> bool {
         self.key == other.key && self.byte == other.byte
     }
@@ -214,27 +207,6 @@ where
     }
 }
 
-#[cfg(feature = "deterministic")]
-impl<P> EncapsulateDeterministic<KEncodedCiphertext<P>, SharedKey<P>> for KEncapsulationKey<P>
-where
-    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
-{
-    type Error = EncodeError;
-
-    fn encapsulate_deterministic(
-        &self,
-        m: &B32,
-    ) -> Result<(KEncodedCiphertext<P>, SharedKey<P>), Self::Error> {
-        let (ek, ss) = self
-            .key
-            .encapsulate_deterministic(m)
-            .map_err(|_| EncodeError::EncapsulationError)?;
-        let (_, ct) = KCiphertext::<P>::new(&ek, &ss)?;
-
-        Ok((KEncodedCiphertext(ct.bytes), ss))
-    }
-}
-
 impl<P> Transcode for KEncapsulationKey<P>
 where
     P: KemCore + FipsByteArraySize,
@@ -282,13 +254,14 @@ where
     }
 }
 
+#[derive(Clone)]
 pub struct KEncodedCiphertext<P>(pub(crate) Array<u8, P::ENCODED_CT_SIZE>)
 where
-    P: KemCore + KemeleonByteArraySize;
+    P: KemeleonByteArraySize;
 
 impl<P> AsRef<[u8]> for KEncodedCiphertext<P>
 where
-    P: KemCore + KemeleonByteArraySize,
+    P: KemeleonByteArraySize,
 {
     fn as_ref(&self) -> &[u8] {
         &self.0
@@ -297,7 +270,7 @@ where
 
 impl<P> PartialEq for KEncodedCiphertext<P>
 where
-    P: KemCore + KemeleonByteArraySize,
+    P: KemeleonByteArraySize,
 {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
@@ -306,7 +279,7 @@ where
 
 impl<P> core::fmt::Debug for KEncodedCiphertext<P>
 where
-    P: KemCore + KemeleonByteArraySize,
+    P: KemeleonByteArraySize,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", hex::encode(&self.0))
@@ -315,7 +288,7 @@ where
 
 impl<P> From<&Array<u8, P::ENCODED_CT_SIZE>> for KEncodedCiphertext<P>
 where
-    P: KemCore + KemeleonByteArraySize,
+    P: KemeleonByteArraySize,
 {
     fn from(value: &Array<u8, P::ENCODED_CT_SIZE>) -> Self {
         KEncodedCiphertext(value.clone())
@@ -324,7 +297,7 @@ where
 
 impl<P> From<Array<u8, P::ENCODED_CT_SIZE>> for KEncodedCiphertext<P>
 where
-    P: KemCore + KemeleonByteArraySize,
+    P: KemeleonByteArraySize,
 {
     fn from(value: Array<u8, P::ENCODED_CT_SIZE>) -> Self {
         KEncodedCiphertext(value)
@@ -351,7 +324,7 @@ where
 
 impl<P> TryFrom<&[u8]> for KEncodedCiphertext<P>
 where
-    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+    P: KemeleonByteArraySize,
 {
     type Error = EncodeError;
 
@@ -362,7 +335,7 @@ where
 
 impl<P> TryFrom<&[u8]> for KCiphertext<P>
 where
-    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+    P: KemCore + KemeleonByteArraySize,
 {
     type Error = EncodeError;
     fn try_from(buf: &[u8]) -> Result<Self, EncodeError> {
@@ -376,10 +349,19 @@ where
 
 /// A `DecapsulationKey` is the secret portion of a keypari that allows the holder to
 /// reveal a value encapsulated using the associated encapsulation key.
-#[derive(Debug, PartialEq, PartialOrd)]
-pub struct KDecapsulationKey<P>(P::DecapsulationKey)
-where
-    P: KemCore;
+pub struct KDecapsulationKey<P: KemCore>(<P as KemCore>::DecapsulationKey);
+
+impl<P: KemCore> PartialEq for KDecapsulationKey<P> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<P: KemCore> Debug for KDecapsulationKey<P> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        <<P as KemCore>::DecapsulationKey as Debug>::fmt(&self.0, f)
+    }
+}
 
 impl<P> Decapsulate<KEncodedCiphertext<P>, SharedKey<P>> for KDecapsulationKey<P>
 where
@@ -465,8 +447,34 @@ where
     }
 
     fn from_bytes(enc: &Encoded<Self>) -> Self {
-        let dk = P::DecapsulationKey::from_bytes(enc);
+        let dk = <P as KemCore>::DecapsulationKey::from_bytes(enc);
         Self(dk)
+    }
+}
+
+impl<P> Canonical for KDecapsulationKey<P>
+where
+    P: KemCore + EncodingSize,
+{
+    type Error = EncodeError;
+    type EncodedSize = <<P as KemCore>::DecapsulationKey as EncodedSizeUser>::EncodedSize;
+    fn as_bytes(&self) -> Array<u8, Self::EncodedSize> {
+        self.0.as_bytes()
+    }
+
+    fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, <Self as Canonical>::Error>
+    where
+        Self: Sized,
+    {
+        let b = buf.as_ref();
+        if b.len() < <<P as KemCore>::DecapsulationKey as EncodedSizeUser>::EncodedSize::USIZE {
+            return Err(EncodeError::ParseError(
+                "provided decapsulation key too short".into(),
+            ));
+        }
+        let encoded_dk = Encoded::<<P as KemCore>::DecapsulationKey>::from_fn(|i| b[i]);
+        let dk = <P as KemCore>::DecapsulationKey::from_bytes(&encoded_dk);
+        Ok(Self(dk))
     }
 }
 
@@ -517,7 +525,7 @@ mod test {
 
         // DecapsulationKey as_bytes
         // DecapsulationKey from_bytes
-        let dkb = dk.as_bytes();
+        let dkb = <KDecapsulationKey<P> as Canonical>::as_bytes(&dk);
         let dk_parsed = KDecapsulationKey::<P>::from_bytes(&dkb);
         assert_eq!(dk.0, dk_parsed.0);
 
@@ -558,12 +566,6 @@ mod test {
         let fips = ek.to_fips();
         // KEncapsulationKey from_fips
         let __ek = KEncapsulationKey::<P>::from_fips(fips);
-
-        // KEncapsulationKey encapsulate_deterministic
-        #[cfg(feature = "deterministic")]
-        let (ct, sk) = __ek
-            .encapsulate_deterministic((&[0u8; 32]).into())
-            .expect("failed encapsulate_deterministic");
 
         let k_recv = dk
             .decapsulate(&ct)

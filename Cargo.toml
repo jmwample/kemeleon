@@ -22,7 +22,6 @@ rustdoc-args = [
 
 [features]
 default=[]
-deterministic = ["ml-kem/deterministic"]
 alloc = []
 
 [dependencies]

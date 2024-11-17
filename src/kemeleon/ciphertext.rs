@@ -1,7 +1,7 @@
 use super::{vector_decode, vector_encode};
 use crate::{
-    fips, ByteArr, ByteArray, Encode, EncodeError, FieldElement, FipsByteArraySize,
-    FipsEncodingSize, KemeleonByteArraySize, KemeleonEncodingSize, Ntt,
+    fips, ByteArr, ByteArray, Canonical, Encode, EncodeError, FieldElement, FipsByteArraySize,
+    FipsEncodingSize, KemeleonByteArraySize, KemeleonEncodingSize, Ntt, Obfuscated,
 };
 
 use hybrid_array::ArraySize;
@@ -26,20 +26,20 @@ pub use crate::mlkem::KCiphertext as Ciphertext;
 #[allow(clippy::module_name_repetitions)]
 pub use crate::mlkem::KEncodedCiphertext as EncodedCiphertext;
 
-impl<P> Encode for EncodedCiphertext<P>
+impl<P> Encode for EncodedCiphertext<P> where P: KemCore + FipsByteArraySize + KemeleonByteArraySize {}
+
+impl<P> Obfuscated for EncodedCiphertext<P>
 where
-    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+    P: KemeleonByteArraySize,
 {
     type EncodedSize = <P as KemeleonByteArraySize>::ENCODED_CT_SIZE;
-
-    /// Error Type returned on failed decode
     type Error = EncodeError;
 
-    fn as_bytes(&self) -> Array<u8, <Self as Encode>::EncodedSize> {
+    fn as_bytes(&self) -> Array<u8, <Self as Obfuscated>::EncodedSize> {
         self.0.clone()
     }
 
-    fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, <Self as Encode>::Error> {
+    fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, <Self as Obfuscated>::Error> {
         let ct_len = <P as KemeleonByteArraySize>::ENCODED_CT_SIZE::USIZE;
         let arr = &buf.as_ref();
 
@@ -52,6 +52,22 @@ where
         let dst = ByteArray::<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>::from_fn(|i| arr[i]);
 
         Ok(EncodedCiphertext::<P>(dst))
+    }
+}
+
+impl<P> Canonical for EncodedCiphertext<P>
+where
+    P: FipsByteArraySize,
+{
+    type EncodedSize = <P as FipsByteArraySize>::ENCODED_CT_SIZE;
+    type Error = EncodeError;
+
+    fn as_bytes(&self) -> Array<u8, <Self as Canonical>::EncodedSize> {
+        Array::<u8, <Self as Canonical>::EncodedSize>::from_fn(|i| self.0[i])
+    }
+
+    fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, <Self as Canonical>::Error> {
+        todo!("trust");
     }
 }
 
@@ -249,11 +265,9 @@ mod test {
             i < MAX_RETRIES,
             "{desc}: failed to find an encodable ciphertext - not possible"
         );
-        // <<<
-        // <<<
 
         let ct_bytes = kemeleon_ct.bytes;
-        let ct_bytes_recv = KEncodedCiphertext::try_from_bytes(ct_bytes)
+        let ct_bytes_recv = <KEncodedCiphertext<P> as Obfuscated>::try_from_bytes(ct_bytes)
             .unwrap_or_else(|e| panic!("{desc} failed to parse KEncodedCiphertext {e}"));
 
         let ct_recv = KCiphertext::<P>::decode(&ct_bytes_recv)

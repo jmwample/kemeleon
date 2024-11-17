@@ -80,7 +80,7 @@ impl Compress for FieldElement {
     }
 }
 
-impl<'a> Compress for IterMut<'a, u16> {
+impl Compress for IterMut<'_, u16> {
     fn compress<D: CompressionFactor>(&mut self) -> &Self {
         self.for_each(|fe| {
             fe.compress::<D>();

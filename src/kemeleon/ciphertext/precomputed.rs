@@ -1,4 +1,7 @@
 //! TODO: Document Use of Precomputed for re-randomizing U values
+
+#![allow(clippy::large_stack_arrays)]
+
 use hybrid_array::ArraySize;
 use lazy_static::lazy_static;
 

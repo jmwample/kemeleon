@@ -1,7 +1,7 @@
 use super::{vector_decode, vector_encode, EncapsulationKey, Encodable, Encode};
 use crate::{
-    fips, ByteArray, EncodeError, EncodingSize, FipsByteArraySize, KemeleonByteArraySize, Ntt,
-    RHO_LEN,
+    fips, ByteArray, Canonical, EncodeError, EncodingSize, FipsByteArraySize,
+    KemeleonByteArraySize, Ntt, Obfuscated, RHO_LEN,
 };
 
 use hybrid_array::{typenum::Unsigned, Array};
@@ -11,7 +11,25 @@ use ml_kem::{EncodedSizeUser, KemCore};
 // Encapsulation Key
 // ========================================================================== //
 
-impl<P> Encode for EncapsulationKey<P>
+impl<P> Encode for EncapsulationKey<P> where P: KemCore + FipsByteArraySize + KemeleonByteArraySize {}
+
+impl<P> Canonical for EncapsulationKey<P>
+where
+    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+{
+    type Error = EncodeError;
+    type EncodedSize = <P as KemeleonByteArraySize>::ENCODED_EK_SIZE;
+
+    fn as_bytes(&self) -> Array<u8, Self::EncodedSize> {
+        todo!("");
+    }
+
+    fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, <Self as Canonical>::Error> {
+        todo!("");
+    }
+}
+
+impl<P> Obfuscated for EncapsulationKey<P>
 where
     P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
 {
@@ -48,7 +66,7 @@ where
     ///     3     a[𝑖] ← ( 𝑟− sum(𝑗=1, 𝑖−1, 𝑝𝑘 [𝑗]) ) / ( 𝑞^(𝑖−1) ) mod 𝑞
     ///     4 return a
     /// ```
-    fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, <Self as Encode>::Error> {
+    fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, <Self as Obfuscated>::Error> {
         EncapsulationKey::<P>::decode_priv(buf.as_ref())
     }
 }
@@ -144,13 +162,14 @@ mod tests {
     {
         let ek_kb =
             ByteArray::<<P as KemeleonByteArraySize>::ENCODED_EK_SIZE>::from_fn(|_| 0xff_u8);
-        let ek = EncapsulationKey::<P>::try_from_bytes(&ek_kb).expect("failed to parse key");
+        let ek = <EncapsulationKey<P> as Obfuscated>::try_from_bytes(&ek_kb)
+            .expect("failed to parse key");
         // println!("{:02x}", ek.key.as_bytes()[<P as FipsByteArraySize>::ENCODED_EK_SIZE::USIZE - RHO_LEN-1]);
 
         // all bits 1 => random mask byte will match the high bit mask
         assert_eq!(P::MSB_BITMASK, ek.byte);
 
-        let ek_kb_1 = ek.as_bytes();
+        let ek_kb_1 = <EncapsulationKey<P> as Obfuscated>::as_bytes(&ek);
         assert_eq!(
             hex::encode(&ek_kb),
             hex::encode(ek_kb_1),
@@ -222,13 +241,13 @@ mod tests {
         // This is the repeated-trial generate function and any key created
         // is guaranteed to be representable, otherwise it would have panicked
         let (_dk, ek) = Kemx::<P>::generate(&mut rng);
-        let dst = ek.as_bytes();
+        let dst = <EncapsulationKey<P> as Obfuscated>::as_bytes(&ek);
         let mut re_encode = dst.clone();
 
         for _ in 0..5 {
             // Encapsulation Key decoded from bytes sent over the wire.
             let recv_ek = EncapsulationKey::<P>::decode_priv(re_encode).expect("failed decode");
-            re_encode = recv_ek.as_bytes();
+            re_encode = <EncapsulationKey<P> as Obfuscated>::as_bytes(&recv_ek);
             assert_eq!(hex::encode(&re_encode), hex::encode(&dst));
         }
     }
@@ -251,7 +270,8 @@ mod tests {
             byte: 0x00,
         };
         if key.is_encodable() {
-            let kv = BigUint::from_bytes_le(&key.as_bytes()[..P::T_HAT_LEN::USIZE]);
+            let encoded = <EncapsulationKey<P> as Obfuscated>::as_bytes(&key);
+            let kv = BigUint::from_bytes_le(&encoded[..P::T_HAT_LEN::USIZE]);
             assert_eq!(&kv, v, "{description}");
         }
     }
@@ -340,7 +360,7 @@ mod tests {
         // is guaranteed to be representable, otherwise it would have panicked
         let (_dk, ek) = Kemx::<P>::generate(&mut rng);
         let orig = ek.key.as_bytes();
-        let dst = ek.as_bytes();
+        let dst = <EncapsulationKey<P> as Obfuscated>::as_bytes(&ek);
 
         // Encapsulation Key decoded from bytes sent over the wire.
         let recv_ek = EncapsulationKey::<P>::decode_priv(dst).expect("failed decode");
