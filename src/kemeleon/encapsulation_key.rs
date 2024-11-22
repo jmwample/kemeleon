@@ -1,7 +1,7 @@
-use super::{vector_decode, vector_encode, EncapsulationKey, Encodable, Encode};
+use super::{vector_decode, vector_encode, EncapsulationKey, Encodable};
 use crate::{
-    fips, ByteArray, Canonical, EncodeError, EncodingSize, FipsByteArraySize,
-    KemeleonByteArraySize, Ntt, Obfuscated, RHO_LEN,
+    fips, ByteArray, EncodeError, EncodingSize, FipsByteArraySize, KemeleonByteArraySize, Ntt,
+    Obfuscated, RHO_LEN,
 };
 
 use hybrid_array::{typenum::Unsigned, Array};
@@ -10,24 +10,6 @@ use ml_kem::{EncodedSizeUser, KemCore};
 // ========================================================================== //
 // Encapsulation Key
 // ========================================================================== //
-
-impl<P> Encode for EncapsulationKey<P> where P: KemCore + FipsByteArraySize + KemeleonByteArraySize {}
-
-impl<P> Canonical for EncapsulationKey<P>
-where
-    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
-{
-    type Error = EncodeError;
-    type EncodedSize = <P as KemeleonByteArraySize>::ENCODED_EK_SIZE;
-
-    fn as_bytes(&self) -> Array<u8, Self::EncodedSize> {
-        todo!("");
-    }
-
-    fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, <Self as Canonical>::Error> {
-        todo!("");
-    }
-}
 
 impl<P> Obfuscated for EncapsulationKey<P>
 where

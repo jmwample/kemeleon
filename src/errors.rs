@@ -69,6 +69,18 @@ impl From<TryFromSliceError> for EncodeError {
 }
 
 impl EncodeError {
+    pub(crate) fn array_too_short(__want: usize, __have: usize) -> Self {
+        #[cfg(feature = "alloc")]
+        {
+            Self::DstBufError(format!("{ARRAY_TOO_SHORT}: {__have} < {__want}"))
+        }
+
+        #[cfg(not(feature = "alloc"))]
+        {
+            Self::ParseError(ARRAY_TOO_SHORT)
+        }
+    }
+
     pub(crate) fn bad_dst_array(__want: usize, __have: usize) -> Self {
         #[cfg(feature = "alloc")]
         {
@@ -112,3 +124,4 @@ const INVALID_CTXT_LENGTH: &str = "incorrect ciphertext length";
 const INCORRECT_EK_LENGTH: &str = "incorrect encapsulation key length";
 const MLKEM_ENCAP_ERR: &str = "ML-KEM encapsulation error";
 const BAD_RNG: &str = "Failed iterated operation: rng source insufficient";
+const ARRAY_TOO_SHORT: &str = "provided data buffer was too short to parse";

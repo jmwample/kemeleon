@@ -347,7 +347,7 @@ pub trait OKemCore: Clone {
     type SharedKey: Canonical + Debug + PartialEq;
 
     /// The ciphertext type encapsulating a shared key
-    type Ciphertext: Canonical + Obfuscated + Debug + PartialEq + Clone;
+    type Ciphertext: Obfuscated + Debug + PartialEq + Clone;
 
     /// A decapsulation key for this KEM
     type DecapsulationKey: Decapsulate<Self::Ciphertext, Self::SharedKey>
@@ -357,7 +357,6 @@ pub trait OKemCore: Clone {
 
     /// An encapsulation key for this KEM
     type EncapsulationKey: Encapsulate<Self::Ciphertext, Self::SharedKey>
-        + Canonical
         + Obfuscated
         + Debug
         + PartialEq
@@ -382,13 +381,19 @@ impl<U: ArraySize> Canonical for Array<u8, U> {
     type EncodedSize = U;
 
     fn as_bytes(&self) -> Array<u8, Self::EncodedSize> {
-        todo!("");
+        self.clone()
     }
 
     fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, <Self as Canonical>::Error>
     where
         Self: Sized,
     {
-        todo!("");
+        let len = U::USIZE;
+        let arr = buf.as_ref();
+
+        if arr.len() < len {
+            return Err(EncodeError::array_too_short(arr.len(), len));
+        }
+        Ok(Array::<u8, U>::from_fn(|i| arr[i]))
     }
 }

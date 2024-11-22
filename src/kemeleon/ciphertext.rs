@@ -1,7 +1,7 @@
 use super::{vector_decode, vector_encode};
 use crate::{
-    fips, ByteArr, ByteArray, Canonical, Encode, EncodeError, FieldElement, FipsByteArraySize,
-    FipsEncodingSize, KemeleonByteArraySize, KemeleonEncodingSize, Ntt, Obfuscated,
+    fips, ByteArr, ByteArray, EncodeError, FieldElement, FipsByteArraySize, FipsEncodingSize,
+    KemeleonByteArraySize, KemeleonEncodingSize, Ntt, Obfuscated,
 };
 
 use hybrid_array::ArraySize;
@@ -25,8 +25,6 @@ use hybrid_array::{typenum::Unsigned, Array};
 pub use crate::mlkem::KCiphertext as Ciphertext;
 #[allow(clippy::module_name_repetitions)]
 pub use crate::mlkem::KEncodedCiphertext as EncodedCiphertext;
-
-impl<P> Encode for EncodedCiphertext<P> where P: KemCore + FipsByteArraySize + KemeleonByteArraySize {}
 
 impl<P> Obfuscated for EncodedCiphertext<P>
 where
@@ -52,22 +50,6 @@ where
         let dst = ByteArray::<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>::from_fn(|i| arr[i]);
 
         Ok(EncodedCiphertext::<P>(dst))
-    }
-}
-
-impl<P> Canonical for EncodedCiphertext<P>
-where
-    P: FipsByteArraySize,
-{
-    type EncodedSize = <P as FipsByteArraySize>::ENCODED_CT_SIZE;
-    type Error = EncodeError;
-
-    fn as_bytes(&self) -> Array<u8, <Self as Canonical>::EncodedSize> {
-        Array::<u8, <Self as Canonical>::EncodedSize>::from_fn(|i| self.0[i])
-    }
-
-    fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, <Self as Canonical>::Error> {
-        todo!("trust");
     }
 }
 

@@ -1,13 +1,14 @@
 use crate::{
     fips, kemeleon::Encodable, ByteArray, Canonical, EncodeError, EncodingSize, FipsByteArraySize,
-    FipsEncodingSize, KemeleonByteArraySize, NttArray, OKemCore, Transcode,
+    FipsEncodingSize, KemeleonByteArraySize, NttArray, OKemCore, Obfuscated, Transcode,
 };
 
 use core::{fmt::Debug, marker::PhantomData};
 
 use hybrid_array::{typenum::Unsigned, Array};
 use kem::{Decapsulate, Encapsulate};
-use ml_kem::{Ciphertext, Encoded, EncodedSizeUser, KemCore, SharedKey};
+use ml_kem::{kem::DecapsulationKey, Ciphertext, Encoded, EncodedSizeUser, KemCore, SharedKey};
+use rand::RngCore;
 use rand_core::CryptoRngCore;
 
 // ========================================================================== //
@@ -40,7 +41,10 @@ where
                 byte: msb_rand,
             };
             if encap_key.is_encodable() {
-                let decap_key = KDecapsulationKey::<P>(dk);
+                let decap_key = KDecapsulationKey::<P> {
+                    key: dk,
+                    byte: msb_rand,
+                };
                 return (decap_key, encap_key);
             }
 
@@ -63,7 +67,10 @@ where
             byte: msb_rand,
         };
 
-        let decap_key = KDecapsulationKey::<P>(dk);
+        let decap_key = KDecapsulationKey::<P> {
+            key: dk,
+            byte: msb_rand,
+        };
         if encap_key.is_encodable() {
             ((decap_key, encap_key), Ok(()))
         } else {
@@ -100,7 +107,7 @@ where
     }
 
     fn encapsulation_key(dk: &Self::DecapsulationKey) -> Self::EncapsulationKey {
-        todo!("");
+        dk.encapsulation_key()
     }
 }
 
@@ -349,17 +356,23 @@ where
 
 /// A `DecapsulationKey` is the secret portion of a keypari that allows the holder to
 /// reveal a value encapsulated using the associated encapsulation key.
-pub struct KDecapsulationKey<P: KemCore>(<P as KemCore>::DecapsulationKey);
+pub struct KDecapsulationKey<P: KemCore> {
+    key: <P as KemCore>::DecapsulationKey,
+    byte: u8,
+}
 
 impl<P: KemCore> PartialEq for KDecapsulationKey<P> {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
+        self.key == other.key && self.byte == other.byte
     }
 }
 
 impl<P: KemCore> Debug for KDecapsulationKey<P> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        <<P as KemCore>::DecapsulationKey as Debug>::fmt(&self.0, f)
+        f.debug_struct("DecapsulationKey")
+            .field("key", &self.key)
+            .field("byte", &self.byte)
+            .finish()
     }
 }
 
@@ -372,7 +385,7 @@ where
     fn decapsulate(&self, ciphertext: &KEncodedCiphertext<P>) -> Result<SharedKey<P>, Self::Error> {
         let ct = KCiphertext::<P>::decode(ciphertext)?;
         let k_send = ct.fips;
-        self.0
+        self.key
             .decapsulate(&k_send)
             .map_err(|_| EncodeError::DecapsulationError)
     }
@@ -385,7 +398,7 @@ where
     type Error = EncodeError;
 
     fn decapsulate(&self, ciphertext: &KCiphertext<P>) -> Result<SharedKey<P>, Self::Error> {
-        self.0
+        self.key
             .decapsulate(&ciphertext.fips)
             .map_err(|_| EncodeError::DecapsulationError)
     }
@@ -398,7 +411,7 @@ where
     type Error = EncodeError;
 
     fn decapsulate(&self, ciphertext: &Ciphertext<P>) -> Result<SharedKey<P>, Self::Error> {
-        self.0
+        self.key
             .decapsulate(ciphertext)
             .map_err(|_| EncodeError::DecapsulationError)
     }
@@ -407,13 +420,25 @@ where
 impl<P: KemCore + EncodingSize + FipsEncodingSize> KDecapsulationKey<P> {
     /// Provides an interface for creating a Kemeleon version of a decapsulation key from
     /// the FIPS byte encoded version.
+    ///
+    /// Adds a random value as the random msb value needed for high order bit randomization
+    /// in the associated encapsulation key.
     pub fn from_fips_bytes(value: impl AsRef<[u8]>) -> Result<Self, EncodeError> {
+        let dk_size = <<P as KemCore>::DecapsulationKey as EncodedSizeUser>::EncodedSize::USIZE;
         let b = value.as_ref();
         let fips_key_encoded =
             Encoded::<P::DecapsulationKey>::try_from(b).map_err(Into::<EncodeError>::into)?;
-        let fips_key = P::DecapsulationKey::from_bytes(&fips_key_encoded);
+        let dk = P::DecapsulationKey::from_bytes(&fips_key_encoded);
 
-        Ok(KDecapsulationKey(fips_key))
+        if b.len() >= dk_size + 1 {
+            Ok(Self {
+                key: dk,
+                byte: b[dk_size],
+            })
+        } else {
+            let byte = rand::thread_rng().next_u32() as u8;
+            Ok(Self { key: dk, byte })
+        }
     }
 
     /// Returns the Decapsulation Key as bytes in the FIPS representtation for serializing
@@ -422,18 +447,28 @@ impl<P: KemCore + EncodingSize + FipsEncodingSize> KDecapsulationKey<P> {
         &self,
     ) -> ByteArray<<<P as ml_kem::KemCore>::DecapsulationKey as ml_kem::EncodedSizeUser>::EncodedSize>
     {
-        self.0.as_bytes()
+        self.key.as_bytes()
     }
 
-    // pub fn encapsulation_key(&self) -> KEncapsulationKey<P> {
-    //     KEncapsulationKey {
-    //         key: self.0.encapsulation_key(),
-    //         byte: 0u8, // TODO XXX: this makes the Encapsulation key byte always 0 -> how do we
-    //                    // store the random byte when writing the decapsulation key out such that
-    //                    // it can be parsed from file and the same encapsulation key can be
-    //                    // recovered?
-    //     }
-    // }
+    /// returns the encapsulation key associated with this decapsulation key
+    ///
+    /// NOTE: A best effort is made to ensure that the ensure that the high order bits
+    /// of the encapsulation key are randomized. If the provided decapsulation key
+    /// is an unmodified kemeleon decapsulation key generated by this library then
+    /// the returned encapsulation key will be consistently the same.
+    ///
+    /// If you have serialied the decapsulation key or parsed from a FIPS format
+    /// decapsulation key, the value of the high order bits will be taken from
+    /// random. This means that serializing the decapsulation key to FIPS format
+    /// and then re-parsing as a kemeleon key, the kemeleon representation has
+    /// a 3/4 chance of differing in the high order two bits when compared to the
+    /// kemeleon representation of the original encapsulation key.
+    pub fn encapsulation_key(&self) -> KEncapsulationKey<P> {
+        KEncapsulationKey {
+            key: <P as KemCore>::DecapsulationKey::encapsulation_key(self),
+            byte: self.byte,
+        }
+    }
 }
 
 impl<P> EncodedSizeUser for KDecapsulationKey<P>
@@ -443,12 +478,13 @@ where
     type EncodedSize = <<P as KemCore>::DecapsulationKey as EncodedSizeUser>::EncodedSize;
 
     fn as_bytes(&self) -> Encoded<Self> {
-        self.0.as_bytes()
+        self.key.as_bytes()
     }
 
     fn from_bytes(enc: &Encoded<Self>) -> Self {
         let dk = <P as KemCore>::DecapsulationKey::from_bytes(enc);
-        Self(dk)
+        let byte = rand::thread_rng().next_u32() as u8;
+        Self { key: dk, byte }
     }
 }
 
@@ -458,29 +494,43 @@ where
 {
     type Error = EncodeError;
     type EncodedSize = <<P as KemCore>::DecapsulationKey as EncodedSizeUser>::EncodedSize;
+
+    /// TODO: DOCU<EMT THIS BEHAVIOR
     fn as_bytes(&self) -> Array<u8, Self::EncodedSize> {
-        self.0.as_bytes()
+        self.key.as_bytes()
     }
 
+    /// TODO: DOCUMENT THIS BEHAVIOR
     fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, <Self as Canonical>::Error>
     where
         Self: Sized,
     {
+        let dk_size = <<P as KemCore>::DecapsulationKey as EncodedSizeUser>::EncodedSize::USIZE;
         let b = buf.as_ref();
-        if b.len() < <<P as KemCore>::DecapsulationKey as EncodedSizeUser>::EncodedSize::USIZE {
+
+        if b.len() < dk_size {
             return Err(EncodeError::ParseError(
                 "provided decapsulation key too short".into(),
             ));
         }
         let encoded_dk = Encoded::<<P as KemCore>::DecapsulationKey>::from_fn(|i| b[i]);
         let dk = <P as KemCore>::DecapsulationKey::from_bytes(&encoded_dk);
-        Ok(Self(dk))
+
+        if b.len() >= dk_size + 1 {
+            Ok(Self {
+                key: dk,
+                byte: b[dk_size],
+            })
+        } else {
+            let byte = rand::thread_rng().next_u32() as u8;
+            Ok(Self { key: dk, byte })
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::{ByteArr, KemeleonByteArraySize};
+    use crate::{ByteArr, KemeleonByteArraySize, Obfuscated};
 
     use super::*;
 
@@ -549,7 +599,7 @@ mod test {
         assert_eq!(sk, k_recv);
 
         let mut ct_arr = ByteArr::zero::<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>();
-        ct_arr.copy_from_slice(&ct.as_bytes());
+        ct_arr.copy_from_slice(&<KEncodedCiphertext<P> as Obfuscated>::as_bytes(&ct));
 
         // KCiphertext try_from &[u8]
         let _ct = KCiphertext::<P>::try_from(&ct_arr[..]).expect("failed parse");

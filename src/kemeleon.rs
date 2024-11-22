@@ -8,7 +8,7 @@ pub use crate::mlkem::KDecapsulationKey as DecapsulationKey;
 pub use crate::mlkem::KEncapsulationKey as EncapsulationKey;
 use crate::FipsByteArraySize;
 use crate::KemeleonByteArraySize;
-use crate::{Encode, EncodeError, EncodingSize, FieldElement};
+use crate::{EncodeError, EncodingSize, FieldElement, Obfuscated};
 
 use core::cmp::min;
 
@@ -21,7 +21,7 @@ mod encapsulation_key;
 
 /// Trait indicating that an object could fail sampling, and testing whether that
 /// object passes or fails that sampling.
-pub trait Encodable: Encode {
+pub trait Encodable: Obfuscated {
     /// Checks if the objcet is encodable given the Kemeleon sampling criteria
     fn is_encodable(&self) -> bool;
 }
