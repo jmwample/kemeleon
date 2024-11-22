@@ -3103,7 +3103,7 @@ mod test {
     use crate::kemeleon::ciphertext::compress::*;
     use crate::{EncodingSize, FieldElement};
 
-    use ml_kem::{MlKem1024, MlKem512, MlKem768};
+    use ml_kem::{MlKem1024Params, MlKem512Params, MlKem768Params};
 
     fn eq_set_completeness_test(desc: &str, eq_set: &[&[u16]]) {
         let mut s = Vec::new();
@@ -3146,8 +3146,8 @@ mod test {
 
     #[test]
     fn sets_match() {
-        eq_sets_match_test::<MlKem512>("du:10, MlKem512");
-        eq_sets_match_test::<MlKem768>("du:10, MlKem768");
-        eq_sets_match_test::<MlKem1024>("du:11, MlKem1024");
+        eq_sets_match_test::<MlKem512Params>("du:10, MlKem512");
+        eq_sets_match_test::<MlKem768Params>("du:10, MlKem768");
+        eq_sets_match_test::<MlKem1024Params>("du:11, MlKem1024");
     }
 }

@@ -210,20 +210,23 @@ mod tests {
     use crate::RHO_LEN;
     use hex_literal::hex;
 
-    use ml_kem::{Encoded, EncodedSizeUser, KemCore, MlKem1024, MlKem512, MlKem768};
+    use ml_kem::{
+        kem::Kem, Encoded, EncodedSizeUser, KemCore, KemParams, MlKem1024Params, MlKem512Params,
+        MlKem768Params,
+    };
 
-    fn fips_encode_trial<D>()
+    fn fips_encode_trial<P>()
     where
-        D: KemCore + FipsByteArraySize,
+        P: KemParams + FipsByteArraySize,
     {
         let mut rng = rand::thread_rng();
-        let (_, ek) = D::generate(&mut rng);
+        let (_, ek) = Kem::<P>::generate(&mut rng);
 
         let bytes_in = ek.as_bytes().to_vec();
         assert!(!bytes_in.is_empty());
-        let (rho, ntt) = ek_decode::<D>(&bytes_in);
+        let (rho, ntt) = ek_decode::<P>(&bytes_in);
 
-        let bytes_out = ek_encode::<D>(&rho, &ntt);
+        let bytes_out = ek_encode::<P>(&rho, &ntt);
         // check that the byte representation of rho matches.
         assert_eq!(
             hex::encode(&bytes_in[..RHO_LEN::USIZE]),
@@ -237,17 +240,17 @@ mod tests {
             "polynomials do not match"
         );
 
-        let tmp = Encoded::<<D as KemCore>::EncapsulationKey>::try_from(&bytes_out[..])
+        let tmp = Encoded::<ml_kem::kem::EncapsulationKey<P>>::try_from(&bytes_out[..])
             .expect("failed to build hybrid_array::Array from bytes");
-        let reconst_ek = <D as KemCore>::EncapsulationKey::from_bytes(&tmp);
+        let reconst_ek = ml_kem::kem::EncapsulationKey::<P>::from_bytes(&tmp);
         assert_eq!(ek, reconst_ek);
     }
 
     #[test]
     fn custom_fips() {
-        fips_encode_trial::<MlKem512>();
-        fips_encode_trial::<MlKem768>();
-        fips_encode_trial::<MlKem1024>();
+        fips_encode_trial::<MlKem512Params>();
+        fips_encode_trial::<MlKem768Params>();
+        fips_encode_trial::<MlKem1024Params>();
     }
 
     #[test]
@@ -262,9 +265,9 @@ mod tests {
         let ek_decoded_in =
             ml_kem::kem::EncapsulationKey::<ml_kem::MlKem512Params>::from_bytes(&ek_encoded);
 
-        let (rho, ntt) = ek_decode::<MlKem512>(&ek_bytes);
+        let (rho, ntt) = ek_decode::<MlKem512Params>(&ek_bytes);
 
-        let bytes_out = ek_encode::<MlKem512>(&rho, &ntt);
+        let bytes_out = ek_encode::<MlKem512Params>(&rho, &ntt);
 
         let ek_encoded =
             Encoded::<ml_kem::kem::EncapsulationKey<ml_kem::MlKem512Params>>::try_from(

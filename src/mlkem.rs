@@ -7,7 +7,10 @@ use core::{fmt::Debug, marker::PhantomData};
 
 use hybrid_array::{typenum::Unsigned, Array};
 use kem::{Decapsulate, Encapsulate};
-use ml_kem::{kem::DecapsulationKey, Ciphertext, Encoded, EncodedSizeUser, KemCore, SharedKey};
+use ml_kem::{
+    kem::{DecapsulationKey, EncapsulationKey, Kem},
+    Ciphertext, Encoded, EncodedSizeUser, KemCore, KemParams, SharedKey,
+};
 use rand::RngCore;
 use rand_core::CryptoRngCore;
 
@@ -21,21 +24,21 @@ pub(crate) const MAX_RETRIES: usize = 64;
 #[derive(Clone)]
 pub struct Kemx<P>
 where
-    P: ml_kem::KemCore,
+    P: KemParams,
 {
     _p: PhantomData<P>,
 }
 
 impl<P> Kemx<P>
 where
-    P: ml_kem::KemCore + FipsByteArraySize + KemeleonByteArraySize,
+    P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
 {
     fn generate_priv(rng: &mut impl CryptoRngCore) -> (KDecapsulationKey<P>, KEncapsulationKey<P>) {
         // random u8 for the most significant byte which will be less than 8 bits.
         let msb_rand = rng.next_u32() as u8;
 
         for _ in 0..MAX_RETRIES {
-            let (dk, ek) = P::generate(rng);
+            let (dk, ek) = Kem::<P>::generate(rng);
             let encap_key = KEncapsulationKey::<P> {
                 key: ek,
                 byte: msb_rand,
@@ -61,7 +64,7 @@ where
     ) {
         let msb_rand = rng.next_u32() as u8;
 
-        let (dk, ek) = P::generate(rng);
+        let (dk, ek) = Kem::<P>::generate(rng);
         let encap_key = KEncapsulationKey::<P> {
             key: ek,
             byte: msb_rand,
@@ -81,11 +84,11 @@ where
 
 impl<P> OKemCore for Kemx<P>
 where
-    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+    P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
 {
     type OkemError = EncodeError;
 
-    type SharedKey = SharedKey<P>;
+    type SharedKey = SharedKey<Kem<P>>;
 
     type Ciphertext = KEncodedCiphertext<P>;
 
@@ -99,7 +102,7 @@ where
 
     fn try_generate(
         rng: &mut impl CryptoRngCore,
-    ) -> Result<(KDecapsulationKey<P>, KEncapsulationKey<P>), EncodeError> {
+    ) -> Result<(Self::DecapsulationKey, Self::EncapsulationKey), EncodeError> {
         match Self::try_generate_priv(rng) {
             (ekdk, Ok(())) => Ok(ekdk),
             (_, Err(e)) => Err(e),
@@ -120,41 +123,15 @@ where
 // more than once).
 /// An `EncapsulationKey` provides the ability to encapsulate a shared key so that
 /// it can only be decapsulated by the holder of the corresponding decapsulation key.
-#[derive(PartialOrd)]
-pub struct KEncapsulationKey<P: KemCore> {
-    pub(crate) key: P::EncapsulationKey,
+#[derive(Clone, Debug, PartialEq)]
+pub struct KEncapsulationKey<P: KemParams> {
+    pub(crate) key: EncapsulationKey<P>,
     pub(crate) byte: u8,
-}
-
-impl<P: KemCore> Clone for KEncapsulationKey<P> {
-    fn clone(&self) -> Self {
-        let k = P::EncapsulationKey::from_bytes(&self.key.as_bytes());
-
-        KEncapsulationKey {
-            byte: self.byte,
-            key: k,
-        }
-    }
-}
-
-impl<P: KemCore> core::fmt::Debug for KEncapsulationKey<P> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("EncapsulationKey")
-            .field("ml_kem_key", &self.key)
-            .field("upper_mask", &self.byte)
-            .finish()
-    }
-}
-
-impl<P: KemCore> PartialEq for KEncapsulationKey<P> {
-    fn eq(&self, other: &Self) -> bool {
-        self.key == other.key && self.byte == other.byte
-    }
 }
 
 impl<P> KEncapsulationKey<P>
 where
-    P: KemCore + EncodingSize + FipsByteArraySize,
+    P: KemParams + EncodingSize + FipsByteArraySize,
 {
     // TODO: must use for now -- not sure it this will stay
     #[must_use]
@@ -176,10 +153,10 @@ where
     /// is only used internally so this should never be provided an improperly
     /// formatted encapsulation key.
     fn from_fips_bytes(ek_fb: impl AsRef<[u8]>, mask_byte: u8) -> Self {
-        let ek_fb_e = Encoded::<<P as KemCore>::EncapsulationKey>::try_from(ek_fb.as_ref())
+        let ek_fb_e = Encoded::<EncapsulationKey<P>>::try_from(ek_fb.as_ref())
             .map_err(EncodeError::MlKemError)
             .unwrap();
-        let key = <P as KemCore>::EncapsulationKey::from_bytes(&ek_fb_e);
+        let key = EncapsulationKey::<P>::from_bytes(&ek_fb_e);
         Self {
             key,
             byte: mask_byte,
@@ -187,16 +164,17 @@ where
     }
 }
 
-impl<P> Encapsulate<KEncodedCiphertext<P>, SharedKey<P>> for KEncapsulationKey<P>
+impl<P> Encapsulate<KEncodedCiphertext<P>, SharedKey<Kem<P>>> for KEncapsulationKey<P>
 where
-    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+    P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
+    EncapsulationKey<P>: Encapsulate<Ciphertext<Kem<P>>, SharedKey<Kem<P>>>,
 {
     type Error = EncodeError;
 
     fn encapsulate(
         &self,
         rng: &mut impl CryptoRngCore,
-    ) -> Result<(KEncodedCiphertext<P>, SharedKey<P>), Self::Error> {
+    ) -> Result<(KEncodedCiphertext<P>, SharedKey<Kem<P>>), Self::Error> {
         for _ in 0..MAX_RETRIES {
             let (ek, ss) = self
                 .key
@@ -216,9 +194,9 @@ where
 
 impl<P> Transcode for KEncapsulationKey<P>
 where
-    P: KemCore + FipsByteArraySize,
+    P: KemParams + FipsByteArraySize,
 {
-    type Fips = <P as KemCore>::EncapsulationKey;
+    type Fips = EncapsulationKey<P>;
 
     fn as_fips(&self) -> &Self::Fips {
         &self.key
@@ -243,15 +221,15 @@ where
 /// A ciphertext produced by the KEM `K`
 pub struct KCiphertext<P>
 where
-    P: KemCore + KemeleonByteArraySize,
+    P: KemParams + KemeleonByteArraySize,
 {
     pub(crate) bytes: Array<u8, P::ENCODED_CT_SIZE>,
-    pub(crate) fips: Ciphertext<P>,
+    pub(crate) fips: Ciphertext<Kem<P>>,
 }
 
 impl<P> core::fmt::Debug for KCiphertext<P>
 where
-    P: KemCore + KemeleonByteArraySize,
+    P: KemParams + KemeleonByteArraySize,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Ciphertext")
@@ -313,7 +291,7 @@ where
 
 impl<P> From<Array<u8, <P as KemeleonByteArraySize>::ENCODED_CT_SIZE>> for KCiphertext<P>
 where
-    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+    P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
 {
     fn from(value: Array<u8, <P as KemeleonByteArraySize>::ENCODED_CT_SIZE>) -> Self {
         KCiphertext::decode(value).unwrap()
@@ -322,7 +300,7 @@ where
 
 impl<P> From<&Array<u8, <P as KemeleonByteArraySize>::ENCODED_CT_SIZE>> for KCiphertext<P>
 where
-    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+    P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
 {
     fn from(value: &Array<u8, <P as KemeleonByteArraySize>::ENCODED_CT_SIZE>) -> Self {
         KCiphertext::decode(value).unwrap()
@@ -342,7 +320,7 @@ where
 
 impl<P> TryFrom<&[u8]> for KCiphertext<P>
 where
-    P: KemCore + KemeleonByteArraySize,
+    P: KemParams + KemeleonByteArraySize,
 {
     type Error = EncodeError;
     fn try_from(buf: &[u8]) -> Result<Self, EncodeError> {
@@ -356,18 +334,18 @@ where
 
 /// A `DecapsulationKey` is the secret portion of a keypari that allows the holder to
 /// reveal a value encapsulated using the associated encapsulation key.
-pub struct KDecapsulationKey<P: KemCore> {
-    key: <P as KemCore>::DecapsulationKey,
+pub struct KDecapsulationKey<P: KemParams> {
+    key: DecapsulationKey<P>,
     byte: u8,
 }
 
-impl<P: KemCore> PartialEq for KDecapsulationKey<P> {
+impl<P: KemParams> PartialEq for KDecapsulationKey<P> {
     fn eq(&self, other: &Self) -> bool {
         self.key == other.key && self.byte == other.byte
     }
 }
 
-impl<P: KemCore> Debug for KDecapsulationKey<P> {
+impl<P: KemParams> Debug for KDecapsulationKey<P> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("DecapsulationKey")
             .field("key", &self.key)
@@ -376,13 +354,17 @@ impl<P: KemCore> Debug for KDecapsulationKey<P> {
     }
 }
 
-impl<P> Decapsulate<KEncodedCiphertext<P>, SharedKey<P>> for KDecapsulationKey<P>
+impl<P> Decapsulate<KEncodedCiphertext<P>, SharedKey<Kem<P>>> for KDecapsulationKey<P>
 where
-    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+    P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
+    DecapsulationKey<P>: Decapsulate<Ciphertext<Kem<P>>, SharedKey<Kem<P>>>,
 {
     type Error = EncodeError;
 
-    fn decapsulate(&self, ciphertext: &KEncodedCiphertext<P>) -> Result<SharedKey<P>, Self::Error> {
+    fn decapsulate(
+        &self,
+        ciphertext: &KEncodedCiphertext<P>,
+    ) -> Result<SharedKey<Kem<P>>, Self::Error> {
         let ct = KCiphertext::<P>::decode(ciphertext)?;
         let k_send = ct.fips;
         self.key
@@ -391,46 +373,54 @@ where
     }
 }
 
-impl<P> Decapsulate<KCiphertext<P>, SharedKey<P>> for KDecapsulationKey<P>
+impl<P> Decapsulate<KCiphertext<P>, SharedKey<Kem<P>>> for KDecapsulationKey<P>
 where
-    P: KemCore + KemeleonByteArraySize,
+    P: KemParams + KemeleonByteArraySize,
+    DecapsulationKey<P>: Decapsulate<Ciphertext<Kem<P>>, SharedKey<Kem<P>>>,
 {
     type Error = EncodeError;
 
-    fn decapsulate(&self, ciphertext: &KCiphertext<P>) -> Result<SharedKey<P>, Self::Error> {
+    fn decapsulate(&self, ciphertext: &KCiphertext<P>) -> Result<SharedKey<Kem<P>>, Self::Error> {
         self.key
             .decapsulate(&ciphertext.fips)
             .map_err(|_| EncodeError::DecapsulationError)
     }
 }
 
-impl<P> Decapsulate<Ciphertext<P>, SharedKey<P>> for KDecapsulationKey<P>
+impl<P> Decapsulate<Ciphertext<Kem<P>>, SharedKey<Kem<P>>> for KDecapsulationKey<P>
 where
-    P: KemCore + EncodingSize,
+    P: KemParams + EncodingSize,
+    DecapsulationKey<P>: Decapsulate<Ciphertext<Kem<P>>, SharedKey<Kem<P>>>,
 {
     type Error = EncodeError;
 
-    fn decapsulate(&self, ciphertext: &Ciphertext<P>) -> Result<SharedKey<P>, Self::Error> {
+    fn decapsulate(
+        &self,
+        ciphertext: &Ciphertext<Kem<P>>,
+    ) -> Result<SharedKey<Kem<P>>, Self::Error> {
         self.key
             .decapsulate(ciphertext)
             .map_err(|_| EncodeError::DecapsulationError)
     }
 }
 
-impl<P: KemCore + EncodingSize + FipsEncodingSize> KDecapsulationKey<P> {
+impl<P> KDecapsulationKey<P>
+where
+    P: KemParams + EncodingSize + FipsEncodingSize,
+{
     /// Provides an interface for creating a Kemeleon version of a decapsulation key from
     /// the FIPS byte encoded version.
     ///
     /// Adds a random value as the random msb value needed for high order bit randomization
     /// in the associated encapsulation key.
     pub fn from_fips_bytes(value: impl AsRef<[u8]>) -> Result<Self, EncodeError> {
-        let dk_size = <<P as KemCore>::DecapsulationKey as EncodedSizeUser>::EncodedSize::USIZE;
+        let dk_size = <DecapsulationKey<P> as EncodedSizeUser>::EncodedSize::USIZE;
         let b = value.as_ref();
         let fips_key_encoded =
-            Encoded::<P::DecapsulationKey>::try_from(b).map_err(Into::<EncodeError>::into)?;
-        let dk = P::DecapsulationKey::from_bytes(&fips_key_encoded);
+            Encoded::<DecapsulationKey<P>>::try_from(b).map_err(Into::<EncodeError>::into)?;
+        let dk = DecapsulationKey::<P>::from_bytes(&fips_key_encoded);
 
-        if b.len() >= dk_size + 1 {
+        if b.len() > dk_size {
             Ok(Self {
                 key: dk,
                 byte: b[dk_size],
@@ -445,8 +435,7 @@ impl<P: KemCore + EncodingSize + FipsEncodingSize> KDecapsulationKey<P> {
     /// and deserializing.
     pub fn to_fips_bytes(
         &self,
-    ) -> ByteArray<<<P as ml_kem::KemCore>::DecapsulationKey as ml_kem::EncodedSizeUser>::EncodedSize>
-    {
+    ) -> ByteArray<<DecapsulationKey<P> as ml_kem::EncodedSizeUser>::EncodedSize> {
         self.key.as_bytes()
     }
 
@@ -465,7 +454,7 @@ impl<P: KemCore + EncodingSize + FipsEncodingSize> KDecapsulationKey<P> {
     /// kemeleon representation of the original encapsulation key.
     pub fn encapsulation_key(&self) -> KEncapsulationKey<P> {
         KEncapsulationKey {
-            key: <P as KemCore>::DecapsulationKey::encapsulation_key(self),
+            key: self.key.encapsulation_key().clone(),
             byte: self.byte,
         }
     }
@@ -473,16 +462,16 @@ impl<P: KemCore + EncodingSize + FipsEncodingSize> KDecapsulationKey<P> {
 
 impl<P> EncodedSizeUser for KDecapsulationKey<P>
 where
-    P: KemCore + EncodingSize,
+    P: KemParams + EncodingSize,
 {
-    type EncodedSize = <<P as KemCore>::DecapsulationKey as EncodedSizeUser>::EncodedSize;
+    type EncodedSize = <DecapsulationKey<P> as EncodedSizeUser>::EncodedSize;
 
     fn as_bytes(&self) -> Encoded<Self> {
         self.key.as_bytes()
     }
 
     fn from_bytes(enc: &Encoded<Self>) -> Self {
-        let dk = <P as KemCore>::DecapsulationKey::from_bytes(enc);
+        let dk = DecapsulationKey::<P>::from_bytes(enc);
         let byte = rand::thread_rng().next_u32() as u8;
         Self { key: dk, byte }
     }
@@ -490,10 +479,10 @@ where
 
 impl<P> Canonical for KDecapsulationKey<P>
 where
-    P: KemCore + EncodingSize,
+    P: KemParams + EncodingSize,
 {
     type Error = EncodeError;
-    type EncodedSize = <<P as KemCore>::DecapsulationKey as EncodedSizeUser>::EncodedSize;
+    type EncodedSize = <DecapsulationKey<P> as EncodedSizeUser>::EncodedSize;
 
     /// TODO: DOCU<EMT THIS BEHAVIOR
     fn as_bytes(&self) -> Array<u8, Self::EncodedSize> {
@@ -505,7 +494,7 @@ where
     where
         Self: Sized,
     {
-        let dk_size = <<P as KemCore>::DecapsulationKey as EncodedSizeUser>::EncodedSize::USIZE;
+        let dk_size = <DecapsulationKey<P> as EncodedSizeUser>::EncodedSize::USIZE;
         let b = buf.as_ref();
 
         if b.len() < dk_size {
@@ -513,10 +502,10 @@ where
                 "provided decapsulation key too short".into(),
             ));
         }
-        let encoded_dk = Encoded::<<P as KemCore>::DecapsulationKey>::from_fn(|i| b[i]);
-        let dk = <P as KemCore>::DecapsulationKey::from_bytes(&encoded_dk);
+        let encoded_dk = Encoded::<DecapsulationKey<P>>::from_fn(|i| b[i]);
+        let dk = DecapsulationKey::from_bytes(&encoded_dk);
 
-        if b.len() >= dk_size + 1 {
+        if b.len() > dk_size {
             Ok(Self {
                 key: dk,
                 byte: b[dk_size],
@@ -530,24 +519,26 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::{ByteArr, KemeleonByteArraySize, Obfuscated};
+    use crate::{
+        ByteArr, KemeleonByteArraySize, MlKem1024Params, MlKem512Params, MlKem768Params, Obfuscated,
+    };
 
     use super::*;
 
-    use ml_kem::{Encoded, EncodedSizeUser, KemCore, MlKem1024, MlKem512, MlKem768};
+    use ml_kem::{Encoded, EncodedSizeUser};
 
     fn generate_trial<P>()
     where
-        P: ml_kem::KemCore + FipsByteArraySize + KemeleonByteArraySize,
+        P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
     {
         let mut rng = rand::thread_rng();
         let (dk, ek) = Kemx::<P>::generate(&mut rng);
 
         // To Fips Encoding and back
         let ek_encoded: Vec<u8> = ek.key.as_bytes().to_vec();
-        let ek_bytes = Encoded::<<P as KemCore>::EncapsulationKey>::try_from(&ek_encoded[..])
+        let ek_bytes = Encoded::<EncapsulationKey<P>>::try_from(&ek_encoded[..])
             .expect("failed to create hybrid_array::Array");
-        let ek_decoded = <P as KemCore>::EncapsulationKey::from_bytes(&ek_bytes);
+        let ek_decoded = EncapsulationKey::<P>::from_bytes(&ek_bytes);
         // make sure recovered key matches the original
         assert_eq!(&ek_decoded, ek.as_fips());
 
@@ -561,14 +552,14 @@ mod test {
 
     #[test]
     fn generate_keys_sampled() {
-        generate_trial::<MlKem512>();
-        generate_trial::<MlKem768>();
-        generate_trial::<MlKem1024>();
+        generate_trial::<MlKem512Params>();
+        generate_trial::<MlKem768Params>();
+        generate_trial::<MlKem1024Params>();
     }
 
     fn coverage_trial<P>()
     where
-        P: ml_kem::KemCore + FipsByteArraySize + KemeleonByteArraySize,
+        P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
     {
         let mut rng = rand::thread_rng();
         let (dk, ek) = Kemx::<P>::generate(&mut rng);
@@ -577,13 +568,13 @@ mod test {
         // DecapsulationKey from_bytes
         let dkb = <KDecapsulationKey<P> as Canonical>::as_bytes(&dk);
         let dk_parsed = KDecapsulationKey::<P>::from_bytes(&dkb);
-        assert_eq!(dk.0, dk_parsed.0);
+        assert_eq!(dk.key, dk_parsed.key);
 
         // DecapsulationKey from_fips_bytes
-        let dk_fips_b = dk.0.as_bytes();
+        let dk_fips_b = dk.key.as_bytes();
         let dk_fips_parsed =
             KDecapsulationKey::<P>::from_fips_bytes(&dk_fips_b).expect("failed fips parse");
-        assert_eq!(dk.0, dk_fips_parsed.0);
+        assert_eq!(dk.key, dk_fips_parsed.key);
 
         // EncapsulationKey encapsulate -> (SharedKey<P>, bool)
         let (ct, sk) = ek.encapsulate(&mut rng).expect("failed encapsulate");
@@ -625,8 +616,8 @@ mod test {
 
     #[test]
     fn coverage() {
-        coverage_trial::<MlKem512>();
-        coverage_trial::<MlKem768>();
-        coverage_trial::<MlKem1024>();
+        coverage_trial::<MlKem512Params>();
+        coverage_trial::<MlKem768Params>();
+        coverage_trial::<MlKem1024Params>();
     }
 }
