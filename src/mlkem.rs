@@ -90,7 +90,7 @@ where
 
     type SharedKey = SharedKey<Kem<P>>;
 
-    type Ciphertext = KEncodedCiphertext<P>;
+    type Ciphertext = KCiphertext<P>;
 
     type DecapsulationKey = KDecapsulationKey<P>;
 
@@ -164,7 +164,7 @@ where
     }
 }
 
-impl<P> Encapsulate<KEncodedCiphertext<P>, SharedKey<Kem<P>>> for KEncapsulationKey<P>
+impl<P> Encapsulate<KCiphertext<P>, SharedKey<Kem<P>>> for KEncapsulationKey<P>
 where
     P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
     EncapsulationKey<P>: Encapsulate<Ciphertext<Kem<P>>, SharedKey<Kem<P>>>,
@@ -174,7 +174,7 @@ where
     fn encapsulate(
         &self,
         rng: &mut impl CryptoRngCore,
-    ) -> Result<(KEncodedCiphertext<P>, SharedKey<Kem<P>>), Self::Error> {
+    ) -> Result<(KCiphertext<P>, SharedKey<Kem<P>>), Self::Error> {
         for _ in 0..MAX_RETRIES {
             let (ek, ss) = self
                 .key
@@ -186,7 +186,7 @@ where
                 continue;
             }
 
-            return Ok((KEncodedCiphertext(ct.bytes), ss));
+            return Ok((ct, ss));
         }
         Err(EncodeError::BadRngSource)
     }
@@ -219,6 +219,7 @@ where
 // ========================================================================== //
 
 /// A ciphertext produced by the KEM `K`
+#[derive(Clone)]
 pub struct KCiphertext<P>
 where
     P: KemParams + KemeleonByteArraySize,
@@ -239,59 +240,27 @@ where
     }
 }
 
-#[derive(Clone)]
-pub struct KEncodedCiphertext<P>(pub(crate) Array<u8, P::ENCODED_CT_SIZE>)
+impl<P> core::cmp::PartialEq for KCiphertext<P>
 where
-    P: KemeleonByteArraySize;
-
-impl<P> AsRef<[u8]> for KEncodedCiphertext<P>
-where
-    P: KemeleonByteArraySize,
-{
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl<P> PartialEq for KEncodedCiphertext<P>
-where
-    P: KemeleonByteArraySize,
+    P: KemParams + KemeleonByteArraySize,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
+        self.bytes == other.bytes
     }
 }
 
-impl<P> core::fmt::Debug for KEncodedCiphertext<P>
+impl<P> AsRef<[u8]> for KCiphertext<P>
 where
-    P: KemeleonByteArraySize,
+    P: KemParams + KemeleonByteArraySize,
 {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", hex::encode(&self.0))
-    }
-}
-
-impl<P> From<&Array<u8, P::ENCODED_CT_SIZE>> for KEncodedCiphertext<P>
-where
-    P: KemeleonByteArraySize,
-{
-    fn from(value: &Array<u8, P::ENCODED_CT_SIZE>) -> Self {
-        KEncodedCiphertext(value.clone())
-    }
-}
-
-impl<P> From<Array<u8, P::ENCODED_CT_SIZE>> for KEncodedCiphertext<P>
-where
-    P: KemeleonByteArraySize,
-{
-    fn from(value: Array<u8, P::ENCODED_CT_SIZE>) -> Self {
-        KEncodedCiphertext(value)
+    fn as_ref(&self) -> &[u8] {
+        &self.bytes
     }
 }
 
 impl<P> From<Array<u8, <P as KemeleonByteArraySize>::ENCODED_CT_SIZE>> for KCiphertext<P>
 where
-    P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
+    P: KemParams + KemeleonByteArraySize,
 {
     fn from(value: Array<u8, <P as KemeleonByteArraySize>::ENCODED_CT_SIZE>) -> Self {
         KCiphertext::decode(value).unwrap()
@@ -304,17 +273,6 @@ where
 {
     fn from(value: &Array<u8, <P as KemeleonByteArraySize>::ENCODED_CT_SIZE>) -> Self {
         KCiphertext::decode(value).unwrap()
-    }
-}
-
-impl<P> TryFrom<&[u8]> for KEncodedCiphertext<P>
-where
-    P: KemeleonByteArraySize,
-{
-    type Error = EncodeError;
-
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        KEncodedCiphertext::try_from_bytes(value)
     }
 }
 
@@ -354,17 +312,16 @@ impl<P: KemParams> Debug for KDecapsulationKey<P> {
     }
 }
 
-impl<P> Decapsulate<KEncodedCiphertext<P>, SharedKey<Kem<P>>> for KDecapsulationKey<P>
+pub type EncodedCt<P> = Array<u8, <P as KemeleonByteArraySize>::ENCODED_CT_SIZE>;
+
+impl<P> Decapsulate<EncodedCt<P>, SharedKey<Kem<P>>> for KDecapsulationKey<P>
 where
     P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
     DecapsulationKey<P>: Decapsulate<Ciphertext<Kem<P>>, SharedKey<Kem<P>>>,
 {
     type Error = EncodeError;
 
-    fn decapsulate(
-        &self,
-        ciphertext: &KEncodedCiphertext<P>,
-    ) -> Result<SharedKey<Kem<P>>, Self::Error> {
+    fn decapsulate(&self, ciphertext: &EncodedCt<P>) -> Result<SharedKey<Kem<P>>, Self::Error> {
         let ct = KCiphertext::<P>::decode(ciphertext)?;
         let k_send = ct.fips;
         self.key
@@ -383,23 +340,6 @@ where
     fn decapsulate(&self, ciphertext: &KCiphertext<P>) -> Result<SharedKey<Kem<P>>, Self::Error> {
         self.key
             .decapsulate(&ciphertext.fips)
-            .map_err(|_| EncodeError::DecapsulationError)
-    }
-}
-
-impl<P> Decapsulate<Ciphertext<Kem<P>>, SharedKey<Kem<P>>> for KDecapsulationKey<P>
-where
-    P: KemParams + EncodingSize,
-    DecapsulationKey<P>: Decapsulate<Ciphertext<Kem<P>>, SharedKey<Kem<P>>>,
-{
-    type Error = EncodeError;
-
-    fn decapsulate(
-        &self,
-        ciphertext: &Ciphertext<Kem<P>>,
-    ) -> Result<SharedKey<Kem<P>>, Self::Error> {
-        self.key
-            .decapsulate(ciphertext)
             .map_err(|_| EncodeError::DecapsulationError)
     }
 }
@@ -502,7 +442,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::{ByteArr, KemeleonByteArraySize, MlKem1024Params, MlKem512Params, MlKem768Params};
+    use crate::{KemeleonByteArraySize, MlKem1024Params, MlKem512Params, MlKem768Params};
 
     use super::*;
 
@@ -566,13 +506,8 @@ mod test {
         let k_recv = dk.decapsulate(&ciphertext).expect("failed to decapsulate");
         assert_eq!(sk, k_recv);
 
-        // KDecapsulationKey decapsulate(mk-kem::Ciphertext)
-        let ct_fips = ciphertext.fips;
-        let k_recv = dk.decapsulate(&ct_fips).expect("failed to decapsulate");
-        assert_eq!(sk, k_recv);
-
-        let mut ct_arr = ByteArr::zero::<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>();
-        ct_arr.copy_from_slice(&KEncodedCiphertext::<P>::as_bytes(&ct));
+        let bytes = &KCiphertext::<P>::as_bytes(&ct);
+        let ct_arr = EncodedCt::<P>::from_fn(|i| bytes[i]);
 
         // KCiphertext try_from &[u8]
         let _ct = KCiphertext::<P>::try_from(&ct_arr[..]).expect("failed parse");
@@ -580,9 +515,9 @@ mod test {
         let _ct = KCiphertext::<P>::from(ct_arr.clone());
         // KCiphertext from &Array<u8, ENCODED_CT_SIZE>
         let _ct = KCiphertext::<P>::from(&ct_arr);
-        // KEncodedCiphertext try_from &[u8]
-        let _ct = KEncodedCiphertext::<P>::try_from(&ct_arr[..]).expect("failed parse");
-        // KEncodedCiphertext from [u8; ENCODED_CT_SIZE]
+        // KCiphertext try_from_bytes &[u8]
+        let _ct = KCiphertext::<P>::try_from_bytes(&ct_arr[..]).expect("failed parse");
+        // KCiphertext from [u8; ENCODED_CT_SIZE]
         let _ct = KCiphertext::<P>::from(ct_arr);
 
         // KEncapsulationKey to_fips

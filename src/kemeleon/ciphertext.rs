@@ -23,18 +23,16 @@ use hybrid_array::{typenum::Unsigned, Array};
 // ========================================================================== //
 
 pub use crate::mlkem::KCiphertext as Ciphertext;
-#[allow(clippy::module_name_repetitions)]
-pub use crate::mlkem::KEncodedCiphertext as EncodedCiphertext;
 
-impl<P> Encode for EncodedCiphertext<P>
+impl<P> Encode for Ciphertext<P>
 where
-    P: KemeleonByteArraySize,
+    P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
 {
     type EncodedSize = <P as KemeleonByteArraySize>::ENCODED_CT_SIZE;
     type Error = EncodeError;
 
     fn as_bytes(&self) -> Array<u8, Self::EncodedSize> {
-        self.0.clone()
+        self.bytes.clone()
     }
 
     fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, Self::Error> {
@@ -48,8 +46,7 @@ where
         }
 
         let dst = ByteArray::<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>::from_fn(|i| arr[i]);
-
-        Ok(EncodedCiphertext::<P>(dst))
+        Ciphertext::<P>::decode(dst)
     }
 }
 
@@ -249,8 +246,8 @@ mod test {
         );
 
         let ct_bytes = kemeleon_ct.bytes;
-        let ct_bytes_recv = EncodedCiphertext::<P>::try_from_bytes(ct_bytes)
-            .unwrap_or_else(|e| panic!("{desc} failed to parse KEncodedCiphertext {e}"));
+        let ct_bytes_recv = Ciphertext::<P>::try_from_bytes(ct_bytes)
+            .unwrap_or_else(|e| panic!("{desc} failed to parse KCiphertext {e}"));
 
         let ct_recv = KCiphertext::<P>::decode(&ct_bytes_recv)
             .unwrap_or_else(|e| panic!("{desc}: failed decode {e}"));
