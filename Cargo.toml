@@ -28,7 +28,8 @@ alloc = []
 num-bigint = "0.4.6"
 rand = "0.8.5"
 # ml-kem = { version = "0.3.0-pre" }
-ml-kem = { git="https://github.com/jmwample/KEMs.git",  branch="main"}
+ml-kem = { git="https://github.com/jmwample/KEMs.git",  branch="params"}
+# ml-kem = { path="../KEMs/ml-kem/" }
 hybrid-array = {version  = "0.2.0-rc.10", features=["extra-sizes"]}
 rand_core = "0.6.4"
 kem = "0.3.0-pre.0"

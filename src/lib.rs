@@ -30,6 +30,7 @@ use hybrid_array::{
     },
     Array, ArraySize,
 };
+use ml_kem::kem::Params as KemParams;
 
 #[derive(Copy, Clone, Default, PartialEq, PartialOrd)]
 pub(crate) struct FieldElement(pub u16);
@@ -246,7 +247,9 @@ impl<T: KemeleonEncodingSize> KemeleonByteArraySize for T {
 //                          Implementation
 // ========================================================================== //
 
-impl EncodingSize for ml_kem::MlKem512 {
+pub use ml_kem::{MlKem1024Params, MlKem512Params, MlKem768Params};
+
+impl EncodingSize for MlKem512Params {
     type USIZE = U12;
     type K = U2;
     type DU = U10;
@@ -256,7 +259,7 @@ impl EncodingSize for ml_kem::MlKem512 {
     const MSB_BITMASK: u8 = 0b1100_0000;
 }
 
-impl EncodingSize for ml_kem::MlKem768 {
+impl EncodingSize for MlKem768Params {
     type USIZE = U12;
     type K = U3;
     type DU = U10;
@@ -266,7 +269,7 @@ impl EncodingSize for ml_kem::MlKem768 {
     const MSB_BITMASK: u8 = 0b1111_1100;
 }
 
-impl EncodingSize for ml_kem::MlKem1024 {
+impl EncodingSize for MlKem1024Params {
     type USIZE = U12;
     type K = U4;
     type DU = U11;
@@ -281,20 +284,20 @@ impl EncodingSize for ml_kem::MlKem1024 {
 // ========================================================================== //
 
 /// ML-KEM with the parameter set for security category 1, corresponding to key search on a block cipher with a 128-bit key.
-pub type MlKem512 = mlkem::Kemx<ml_kem::MlKem512>;
+pub type MlKem512 = mlkem::Kemx<ml_kem::MlKem512Params>;
 
 /// ML-KEM with the parameter set for security category 3, corresponding to key search on a block cipher with a 192-bit key.
-pub type MlKem768 = mlkem::Kemx<ml_kem::MlKem768>;
+pub type MlKem768 = mlkem::Kemx<ml_kem::MlKem768Params>;
 
 /// ML-KEM with the parameter set for security category 5, corresponding to key search on a block cipher with a 256-bit key.
-pub type MlKem1024 = mlkem::Kemx<ml_kem::MlKem1024>;
+pub type MlKem1024 = mlkem::Kemx<ml_kem::MlKem1024Params>;
 
 impl<P> EncodingSize for mlkem::Kemx<P>
 where
-    P: ml_kem::KemCore + EncodingSize,
+    P: KemParams + EncodingSize,
 {
     type USIZE = P::USIZE;
-    type K = P::K;
+    type K = <P as EncodingSize>::K;
     type DU = P::DU;
     type DV = P::DV;
 

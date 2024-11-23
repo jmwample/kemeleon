@@ -13,7 +13,7 @@ use crate::{EncodeError, EncodingSize, FieldElement, Obfuscated};
 use core::cmp::min;
 
 use hybrid_array::typenum::Unsigned;
-use ml_kem::KemCore;
+use ml_kem::kem::Params as KemParams;
 use num_bigint::BigUint;
 
 mod ciphertext;
@@ -31,7 +31,7 @@ pub(crate) fn vector_encode<P>(
     mut c: impl AsMut<[u8]>,
 ) -> Result<bool, EncodeError>
 where
-    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+    P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
 {
     let dst = c.as_mut();
     if dst.len() < P::T_HAT_LEN::USIZE {
@@ -63,7 +63,7 @@ pub(crate) fn vector_decode<P>(
     mut p: impl AsMut<[u16]>,
 ) -> Result<(), EncodeError>
 where
-    P: KemCore + EncodingSize,
+    P: KemParams + EncodingSize,
 {
     if c.as_ref().len() < P::T_HAT_LEN::USIZE {
         return Err(EncodeError::invalid_ctxt_len(c.as_ref().len()));
