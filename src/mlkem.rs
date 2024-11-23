@@ -422,7 +422,7 @@ where
 
         if b.len() < dk_size {
             return Err(EncodeError::ParseError(
-                "provided decapsulation key too short".into(),
+                "provided decapsulation key too short",
             ));
         }
         let encoded_dk = Encoded::<DecapsulationKey<P>>::from_fn(|i| b[i]);
