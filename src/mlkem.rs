@@ -421,7 +421,7 @@ where
         let b = buf.as_ref();
 
         if b.len() < dk_size {
-            return Err(EncodeError::ParseError(
+            return Err(EncodeError::parse_error(
                 "provided decapsulation key too short",
             ));
         }

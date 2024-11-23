@@ -47,20 +47,27 @@ interface as currently implemented.
 
 ## Usage
 
-```rust ignore
-use kemeleon::MlKem512;
+```rust
+use kemeleon::{MlKem512, OKemCore, Encode};
 use kem::{Encapsulate, Decapsulate};
+
+type EncapKey<P> = <P as OKemCore>::EncapsulationKey;
+type Ct<P> = <P as OKemCore>::Ciphertext;
 
 let mut rng = rand::thread_rng();
 let (dk, ek) = MlKem512::generate(&mut rng);
 
-// // Converting the Encapsulation key to bytes and back in order to be sent.
-// let ek_encoded: Vec<u8> = ek.as_bytes().to_vec();
+// Converting the Encapsulation key to bytes and back in order to be sent.
+let ek_encoded: Vec<u8> = ek.as_bytes().to_vec();
+let ek = EncapKey::<MlKem512>::try_from_bytes(&ek_encoded[..])
+    .expect("failed to parse encapsulation key");
 
 let (ct, k_send) = ek.encapsulate(&mut rng).unwrap();
 
-// // Converting the ciphertext to bytes and back in order to be sent.
-// let ct = Ciphertext::<MlKem512>::from_bytes(ct);
+// Converting the ciphertext to bytes and back in order to be sent.
+let ct_bytes = ct.as_bytes();
+let ct = Ct::<MlKem512>::try_from_bytes(&ct_bytes[..])
+    .expect("failed to parse ciphertext");
 
 let k_recv = dk.decapsulate(&ct).unwrap();
 assert_eq!(k_send, k_recv);

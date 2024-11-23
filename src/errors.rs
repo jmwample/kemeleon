@@ -69,10 +69,22 @@ impl From<TryFromSliceError> for EncodeError {
 }
 
 impl EncodeError {
+    pub(crate) fn parse_error(s: &'static str) -> Self {
+        #[cfg(feature = "alloc")]
+        {
+            Self::ParseError(s.into())
+        }
+
+        #[cfg(not(feature = "alloc"))]
+        {
+            Self::ParseError(s)
+        }
+    }
+
     pub(crate) fn array_too_short(__want: usize, __have: usize) -> Self {
         #[cfg(feature = "alloc")]
         {
-            Self::DstBufError(format!("{ARRAY_TOO_SHORT}: {__have} < {__want}"))
+            Self::ParseError(format!("{ARRAY_TOO_SHORT}: {__have} < {__want}"))
         }
 
         #[cfg(not(feature = "alloc"))]
