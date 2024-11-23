@@ -5,7 +5,7 @@ use crate::{
 };
 
 use hybrid_array::{typenum::Unsigned, Array};
-use ml_kem::{EncodedSizeUser, KemParams};
+use ml_kem::{kem::Params as KemParams, EncodedSizeUser};
 
 // ========================================================================== //
 // Encapsulation Key

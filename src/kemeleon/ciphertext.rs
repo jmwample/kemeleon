@@ -5,7 +5,7 @@ use crate::{
 };
 
 use hybrid_array::ArraySize;
-use ml_kem::{kem::Kem, KemParams};
+use ml_kem::kem::{Kem, Params as KemParams};
 use rand::{CryptoRng, RngCore};
 use rand_core::CryptoRngCore;
 use sha2::Sha256;

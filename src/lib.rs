@@ -30,7 +30,7 @@ use hybrid_array::{
     },
     Array, ArraySize,
 };
-use ml_kem::KemParams;
+use ml_kem::kem::Params as KemParams;
 
 #[derive(Copy, Clone, Default, PartialEq, PartialOrd)]
 pub(crate) struct FieldElement(pub u16);

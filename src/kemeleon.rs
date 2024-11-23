@@ -13,7 +13,7 @@ use crate::{EncodeError, EncodingSize, FieldElement, Obfuscated};
 use core::cmp::min;
 
 use hybrid_array::typenum::Unsigned;
-use ml_kem::KemParams;
+use ml_kem::kem::Params as KemParams;
 use num_bigint::BigUint;
 
 mod ciphertext;

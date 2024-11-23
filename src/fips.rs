@@ -211,8 +211,8 @@ mod tests {
     use hex_literal::hex;
 
     use ml_kem::{
-        kem::Kem, Encoded, EncodedSizeUser, KemCore, KemParams, MlKem1024Params, MlKem512Params,
-        MlKem768Params,
+        kem::{Kem, Params as KemParams},
+        Encoded, EncodedSizeUser, KemCore, MlKem1024Params, MlKem512Params, MlKem768Params,
     };
 
     fn fips_encode_trial<P>()

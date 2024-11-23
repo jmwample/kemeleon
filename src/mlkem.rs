@@ -8,8 +8,8 @@ use core::{fmt::Debug, marker::PhantomData};
 use hybrid_array::{typenum::Unsigned, Array};
 use kem::{Decapsulate, Encapsulate};
 use ml_kem::{
-    kem::{DecapsulationKey, EncapsulationKey, Kem},
-    Ciphertext, Encoded, EncodedSizeUser, KemCore, KemParams, SharedKey,
+    kem::{DecapsulationKey, EncapsulationKey, Kem, Params as KemParams},
+    Ciphertext, Encoded, EncodedSizeUser, KemCore, SharedKey,
 };
 use rand::RngCore;
 use rand_core::CryptoRngCore;
