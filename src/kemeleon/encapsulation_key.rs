@@ -1,7 +1,7 @@
 use super::{vector_decode, vector_encode, EncapsulationKey, Encodable};
 use crate::{
-    fips, ByteArray, EncodeError, EncodingSize, FipsByteArraySize, KemeleonByteArraySize, Ntt,
-    Obfuscated, RHO_LEN,
+    fips, ByteArray, Encode, EncodeError, EncodingSize, FipsByteArraySize, KemeleonByteArraySize,
+    Ntt, RHO_LEN,
 };
 
 use hybrid_array::{typenum::Unsigned, Array};
@@ -11,7 +11,7 @@ use ml_kem::{kem::Params as KemParams, EncodedSizeUser};
 // Encapsulation Key
 // ========================================================================== //
 
-impl<P> Obfuscated for EncapsulationKey<P>
+impl<P> Encode for EncapsulationKey<P>
 where
     P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
 {
@@ -48,7 +48,7 @@ where
     ///     3     a[𝑖] ← ( 𝑟− sum(𝑗=1, 𝑖−1, 𝑝𝑘 [𝑗]) ) / ( 𝑞^(𝑖−1) ) mod 𝑞
     ///     4 return a
     /// ```
-    fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, <Self as Obfuscated>::Error> {
+    fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, Self::Error> {
         EncapsulationKey::<P>::decode_priv(buf.as_ref())
     }
 }
@@ -147,14 +147,13 @@ mod tests {
     {
         let ek_kb =
             ByteArray::<<P as KemeleonByteArraySize>::ENCODED_EK_SIZE>::from_fn(|_| 0xff_u8);
-        let ek = <EncapsulationKey<P> as Obfuscated>::try_from_bytes(&ek_kb)
-            .expect("failed to parse key");
+        let ek = EncapsulationKey::<P>::try_from_bytes(&ek_kb).expect("failed to parse key");
         // println!("{:02x}", ek.key.as_bytes()[<P as FipsByteArraySize>::ENCODED_EK_SIZE::USIZE - RHO_LEN-1]);
 
         // all bits 1 => random mask byte will match the high bit mask
         assert_eq!(P::MSB_BITMASK, ek.byte);
 
-        let ek_kb_1 = <EncapsulationKey<P> as Obfuscated>::as_bytes(&ek);
+        let ek_kb_1 = EncapsulationKey::<P>::as_bytes(&ek);
         assert_eq!(
             hex::encode(&ek_kb),
             hex::encode(ek_kb_1),
@@ -227,13 +226,13 @@ mod tests {
         // This is the repeated-trial generate function and any key created
         // is guaranteed to be representable, otherwise it would have panicked
         let (_dk, ek) = Kemx::<P>::generate(&mut rng);
-        let dst = <EncapsulationKey<P> as Obfuscated>::as_bytes(&ek);
+        let dst = EncapsulationKey::<P>::as_bytes(&ek);
         let mut re_encode = dst.clone();
 
         for _ in 0..5 {
             // Encapsulation Key decoded from bytes sent over the wire.
             let recv_ek = EncapsulationKey::<P>::decode_priv(re_encode).expect("failed decode");
-            re_encode = <EncapsulationKey<P> as Obfuscated>::as_bytes(&recv_ek);
+            re_encode = EncapsulationKey::<P>::as_bytes(&recv_ek);
             assert_eq!(hex::encode(&re_encode), hex::encode(&dst));
         }
     }
@@ -256,7 +255,7 @@ mod tests {
             byte: 0x00,
         };
         if key.is_encodable() {
-            let encoded = <EncapsulationKey<P> as Obfuscated>::as_bytes(&key);
+            let encoded = EncapsulationKey::<P>::as_bytes(&key);
             let kv = BigUint::from_bytes_le(&encoded[..P::T_HAT_LEN::USIZE]);
             assert_eq!(&kv, v, "{description}");
         }
@@ -347,7 +346,7 @@ mod tests {
         // is guaranteed to be representable, otherwise it would have panicked
         let (_dk, ek) = Kemx::<P>::generate(&mut rng);
         let orig = ek.key.as_bytes();
-        let dst = <EncapsulationKey<P> as Obfuscated>::as_bytes(&ek);
+        let dst = EncapsulationKey::<P>::as_bytes(&ek);
 
         // Encapsulation Key decoded from bytes sent over the wire.
         let recv_ek = EncapsulationKey::<P>::decode_priv(dst).expect("failed decode");

@@ -1,6 +1,6 @@
 use crate::{
-    fips, kemeleon::Encodable, ByteArray, Canonical, EncodeError, EncodingSize, FipsByteArraySize,
-    FipsEncodingSize, KemeleonByteArraySize, NttArray, OKemCore, Obfuscated, Transcode,
+    fips, kemeleon::Encodable, ByteArray, Encode, EncodeError, EncodingSize, FipsByteArraySize,
+    FipsEncodingSize, KemeleonByteArraySize, NttArray, OKemCore, Transcode,
 };
 
 use core::{fmt::Debug, marker::PhantomData};
@@ -460,37 +460,20 @@ where
     }
 }
 
-impl<P> EncodedSizeUser for KDecapsulationKey<P>
-where
-    P: KemParams + EncodingSize,
-{
-    type EncodedSize = <DecapsulationKey<P> as EncodedSizeUser>::EncodedSize;
-
-    fn as_bytes(&self) -> Encoded<Self> {
-        self.key.as_bytes()
-    }
-
-    fn from_bytes(enc: &Encoded<Self>) -> Self {
-        let dk = DecapsulationKey::<P>::from_bytes(enc);
-        let byte = rand::thread_rng().next_u32() as u8;
-        Self { key: dk, byte }
-    }
-}
-
-impl<P> Canonical for KDecapsulationKey<P>
+impl<P> Encode for KDecapsulationKey<P>
 where
     P: KemParams + EncodingSize,
 {
     type Error = EncodeError;
     type EncodedSize = <DecapsulationKey<P> as EncodedSizeUser>::EncodedSize;
 
-    /// TODO: DOCU<EMT THIS BEHAVIOR
+    /// TODO: DOCUMENT THIS BEHAVIOR
     fn as_bytes(&self) -> Array<u8, Self::EncodedSize> {
         self.key.as_bytes()
     }
 
     /// TODO: DOCUMENT THIS BEHAVIOR
-    fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, <Self as Canonical>::Error>
+    fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, Self::Error>
     where
         Self: Sized,
     {
@@ -519,9 +502,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        ByteArr, KemeleonByteArraySize, MlKem1024Params, MlKem512Params, MlKem768Params, Obfuscated,
-    };
+    use crate::{ByteArr, KemeleonByteArraySize, MlKem1024Params, MlKem512Params, MlKem768Params};
 
     use super::*;
 
@@ -566,8 +547,9 @@ mod test {
 
         // DecapsulationKey as_bytes
         // DecapsulationKey from_bytes
-        let dkb = <KDecapsulationKey<P> as Canonical>::as_bytes(&dk);
-        let dk_parsed = KDecapsulationKey::<P>::from_bytes(&dkb);
+        let dkb = KDecapsulationKey::<P>::as_bytes(&dk);
+        let dk_parsed = KDecapsulationKey::<P>::try_from_bytes(&dkb)
+            .expect("failed to parse decapsulation key");
         assert_eq!(dk.key, dk_parsed.key);
 
         // DecapsulationKey from_fips_bytes
@@ -590,7 +572,7 @@ mod test {
         assert_eq!(sk, k_recv);
 
         let mut ct_arr = ByteArr::zero::<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>();
-        ct_arr.copy_from_slice(&<KEncodedCiphertext<P> as Obfuscated>::as_bytes(&ct));
+        ct_arr.copy_from_slice(&KEncodedCiphertext::<P>::as_bytes(&ct));
 
         // KCiphertext try_from &[u8]
         let _ct = KCiphertext::<P>::try_from(&ct_arr[..]).expect("failed parse");

@@ -1,7 +1,7 @@
 use super::{vector_decode, vector_encode};
 use crate::{
-    fips, ByteArr, ByteArray, EncodeError, FieldElement, FipsByteArraySize, FipsEncodingSize,
-    KemeleonByteArraySize, KemeleonEncodingSize, Ntt, Obfuscated,
+    fips, ByteArr, ByteArray, Encode, EncodeError, FieldElement, FipsByteArraySize,
+    FipsEncodingSize, KemeleonByteArraySize, KemeleonEncodingSize, Ntt,
 };
 
 use hybrid_array::ArraySize;
@@ -26,18 +26,18 @@ pub use crate::mlkem::KCiphertext as Ciphertext;
 #[allow(clippy::module_name_repetitions)]
 pub use crate::mlkem::KEncodedCiphertext as EncodedCiphertext;
 
-impl<P> Obfuscated for EncodedCiphertext<P>
+impl<P> Encode for EncodedCiphertext<P>
 where
     P: KemeleonByteArraySize,
 {
     type EncodedSize = <P as KemeleonByteArraySize>::ENCODED_CT_SIZE;
     type Error = EncodeError;
 
-    fn as_bytes(&self) -> Array<u8, <Self as Obfuscated>::EncodedSize> {
+    fn as_bytes(&self) -> Array<u8, Self::EncodedSize> {
         self.0.clone()
     }
 
-    fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, <Self as Obfuscated>::Error> {
+    fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, Self::Error> {
         let ct_len = <P as KemeleonByteArraySize>::ENCODED_CT_SIZE::USIZE;
         let arr = &buf.as_ref();
 
@@ -206,7 +206,7 @@ where
 mod test {
     use super::*;
     use crate::{
-        mlkem::{KCiphertext, KEncodedCiphertext, Kemx, MAX_RETRIES},
+        mlkem::{KCiphertext, Kemx, MAX_RETRIES},
         OKemCore,
     };
 
@@ -249,7 +249,7 @@ mod test {
         );
 
         let ct_bytes = kemeleon_ct.bytes;
-        let ct_bytes_recv = <KEncodedCiphertext<P> as Obfuscated>::try_from_bytes(ct_bytes)
+        let ct_bytes_recv = EncodedCiphertext::<P>::try_from_bytes(ct_bytes)
             .unwrap_or_else(|e| panic!("{desc} failed to parse KEncodedCiphertext {e}"));
 
         let ct_recv = KCiphertext::<P>::decode(&ct_bytes_recv)
