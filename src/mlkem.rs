@@ -352,7 +352,7 @@ where
 {
     const HIGH_ORDER_BITS_IKM: &[u8; 34] = b"kemeleon:decapsulation_key_msb_mac";
 
-    /// Returns a decapsulation key built from a ['ml_kem::kem::DecapsulationKey`].
+    /// Returns a decapsulation key built from a [`ml_kem::kem::DecapsulationKey`].
     pub fn new(key: DecapsulationKey<P>) -> Self {
         Self {
             byte: Self::get_high_order_bits(&key),
