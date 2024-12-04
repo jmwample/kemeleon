@@ -2,7 +2,7 @@
 
 Discussion of implementation specifics not included in the paper.
 
-## Iterative attempts
+## Iterative Key Generation
 
 As both the `generate()` and `Ciphertext.Encode()` reject with reasonably frequent probability we implement
 the key generation and shared secret encapsulation to be iterative. This way, if the provided source of
@@ -10,14 +10,36 @@ randomness is reliable, values that satisfy the sampling criteria will be chosen
 
 TODO: this section is incomplete
 
-## Encapsulation Key Encoding
+## High Order Bits, Randomness, and Key Encodings
 
-We need one byte of randomness, stored with the key.
+The kemeleon representation of the encapsulation key requires several bits of of randomness (beyond the 
+value of the key itself). This is because the kemeleon encoding is uniform random to a number of bits which
+is not divisible by 8. If we do not generate these deterministically, then there is no longer a one-to-one
+mapping of encapsulation key representations to decapsulation keys. As there is no change to the serialized
+format of the decapsulation key, if an application required that their long term identity key were kemeleon
+encodable serializing on exit and deserializing on startup, drawing the high order bits from random would
+(likely) result in differing kemeleon representations of the encapsulation key.
 
-TODO: this section is incomplete
+In order to avoid this issue, the extra byte of randomness is deterministically drawn from an HKDF of the
+FIPS byte representation of the decapsulation Key. This reveals nothing about the value of the chosen
+decapsulation key as the following resists preimage and second preimage attacks.
+
+$$
+HKDF_{sha256}(ikm:":constant\_string", info: dk.as\_bytes(), salt: NULL)
+$$
+
+In this way the kemeleon representation of the encapsulation key is made one-to-one with the decapsulation
+key as there is only one valid value for the high order bits.
+
+### Avoiding Bit Manipulation
+
+It is important to note that decoding the kemeleon encapsulation key clears the high order bits, meaning that
+they do not actaully impact the correctness of the decoded key. When including a kemeleon encoded encapsulation
+key in a message sent through a potentially adversarial channel it is important to ensure that the byte
+representation has not been tampered with (using something like an HMAC) to avoid an attack where the adversary
+flips one or more of the high order bits without the application throwing an error.
 
 ## Ciphertext Encoding
-
 
 ### Randomness Management
 
