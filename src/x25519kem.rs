@@ -3,59 +3,35 @@
 //! Implements the `kem::{Encapsulate, Decapsulate}` traits.
 //!
 
+use crate::OKemCore;
 
-use crate::{DhDecapsulator, DhEncapsulator, DhKem};
-use core::convert::Infallible;
-use kem::{Decapsulate, Encapsulate};
-use rand_core::CryptoRngCore;
-use x25519::{PublicKey, ReusableSecret, SharedSecret};
+use dhkem::{DhKem, X25519Kem};
 
 mod x25519_elligator2;
+use x25519_elligator2::ReusableSecret;
 
-/// X22519 Diffie-Hellman KEM adapter.
-///
-/// Implements a KEM interface that internally uses X25519 ECDH.
-pub struct X25519Kem;
+impl OKemCore for X25519Kem {
+    type OkemError = ();
+    type SharedKey = <Self as DhKem>::SharedSecret;
+    type Ciphertext = <Self as DhKem>::EncapsulatedKey;
+    type DecapsulationKey = <Self as DhKem>::DecapsulatingKey;
+    type EncapsulationKey = <Self as DhKem>::EncapsulatedKey;
 
-impl Encapsulate<PublicKey, SharedSecret> for DhEncapsulator<PublicKey> {
-    type Error = Infallible;
+    fn generate(
+        rng: &mut impl rand_core::CryptoRngCore,
+    ) -> (Self::DecapsulationKey, Self::EncapsulationKey) {
+        todo!("coming soon _tm_");
+    }
 
-    fn encapsulate(
-        &self,
-        rng: &mut impl CryptoRngCore,
-    ) -> Result<(PublicKey, SharedSecret), Self::Error> {
-        // ECDH encapsulation involves creating a new ephemeral key pair and then doing DH
-        let sk = ReusableSecret::random_from_rng(rng);
-        let pk = PublicKey::from(&sk);
-        let ss = sk.diffie_hellman(&self.0);
+    fn try_generate(
+        rng: &mut impl rand_core::CryptoRngCore,
+    ) -> Result<(Self::DecapsulationKey, Self::EncapsulationKey), Self::OkemError> {
+        todo!("its too late");
+    }
 
-        Ok((pk, ss))
+    fn encapsulation_key(dk: &Self::DecapsulationKey) -> Self::EncapsulationKey {
+        todo!("howdy partner");
     }
 }
 
-impl Decapsulate<PublicKey, SharedSecret> for DhDecapsulator<ReusableSecret> {
-    type Error = Infallible;
-
-    fn decapsulate(&self, encapsulated_key: &PublicKey) -> Result<SharedSecret, Self::Error> {
-        let ss = self.0.diffie_hellman(encapsulated_key);
-
-        Ok(ss)
-    }
-}
-
-impl DhKem for X25519Kem {
-    type DecapsulatingKey = DhDecapsulator<ReusableSecret>;
-    type EncapsulatingKey = DhEncapsulator<PublicKey>;
-    type EncapsulatedKey = PublicKey;
-    type SharedSecret = SharedSecret;
-
-    fn random_keypair(
-        rng: &mut impl CryptoRngCore,
-    ) -> (Self::DecapsulatingKey, Self::EncapsulatingKey) {
-        let sk = ReusableSecret::random_from_rng(rng);
-        let pk = PublicKey::from(&sk);
-
-        (DhDecapsulator(sk), DhEncapsulator(pk))
-    }
-}
 
