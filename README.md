@@ -127,11 +127,11 @@ with our reasoning; only that it will exist.)
 
 ### Cleanup -> Release 0.1.0
 
+- [x] Decide how to handle serializing and Deserializing `DecapsulationKey`s wrt. high order bits of the kemeleon encoded `EncapsulationKey`s
 - [ ] ([`RustCrypto/KEMs#81`](https://github.com/RustCrypto/KEMs/pull/81)) - Make `ml_kem::(En|De)capsulationKey` more usable.
 - [ ] Polish public interface and docs
 - [ ] Github actions release workflow
-- [ ] Impl `OKemCore` for `xwing` and `DHKEM`
-- [ ] Decide how to handle serializing and Deserializing `DecapsulationKey`s wrt. high order bits of the kemeleon encoded `EncapsulationKey`s
+- [ ] Impl `OKemCore` for `xwing` and `x25519kem`
 
 ### Heading to Release 0.1.1
 

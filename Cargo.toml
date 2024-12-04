@@ -23,6 +23,7 @@ rustdoc-args = [
 [features]
 default=[]
 alloc = []
+getrandom = ["dep:getrandom"]
 
 [dependencies]
 num-bigint = "0.4.6"
@@ -42,6 +43,14 @@ hkdf = "0.12.4"
 sha2 = "0.10.8"
 
 hex =  { version = "0.4.3", features = ["serde"] }
+
+# X25519 KEM
+curve25519-elligator2 = { version="0.1.0-alpha.2", features=["elligator2"]}
+x25519-dalek = "2.0.1"
+dhkem = { version = "0.0.1-alpha", features=["x25519"]}
+
+# getrandom feature
+getrandom = {version="0.2.15", optional=true}
 
 [dev-dependencies]
 
