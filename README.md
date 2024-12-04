@@ -101,7 +101,7 @@ with our reasoning; only that it will exist.)
 
 ## Roadmap
 
-Core features
+### Core features
 
 - [x] Public interface first pass
 - [x] Interface with [`ml_kem`](https://docs.rs/ml-kem/latest)
@@ -119,16 +119,18 @@ Core features
     - const generics are an unstable feature, even though this is a very simple
       application of the feature it is bad practice to ask people use it in its current state.
   - [x] CI tests/builds for stable releases (const generics only work on nightly)
-- [ ] Nist vectors Integration tests
+- [x] ~Nist vectors Integration tests~
 
-Cleanup -> Release 0.1.0
+### Cleanup -> Release 0.1.0
 
+- [ ] ([`RustCrypto/KEMs#81`](https://github.com/RustCrypto/KEMs/pull/81)) - Make `ml_kem::(En|De)capsulationKey` more usable.
 - [ ] Polish public interface and docs
 - [ ] Github actions release workflow
+- [ ] Impl `OKemCore` for `xwing` and `DHKEM`
+- [ ] Decide how to handle serializing and Deserializing `DecapsulationKey`s wrt. high order bits of the kemeleon encoded `EncapsulationKey`s
 
-Heading to Release 0.1.1
+### Heading to Release 0.1.1
 
 - [ ] work up PR(s) for [ml-kem](https://docs.rs/ml-kem/latest/ml_kem/)
-  - [ ] expose internal things under a `dev` feature
 - [ ] remove as much repeated functionality as possible
 - [ ] revisit secure deterministic random byte generation
