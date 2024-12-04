@@ -1,11 +1,11 @@
-use super::{vector_decode, vector_encode, EncapsulationKey, Encodable, Encode};
+use super::{vector_decode, vector_encode, EncapsulationKey, Encodable};
 use crate::{
-    fips, ByteArray, EncodeError, EncodingSize, FipsByteArraySize, KemeleonByteArraySize, Ntt,
-    RHO_LEN,
+    fips, ByteArray, Encode, EncodeError, EncodingSize, FipsByteArraySize, KemeleonByteArraySize,
+    Ntt, RHO_LEN,
 };
 
-use hybrid_array::typenum::Unsigned;
-use ml_kem::{EncodedSizeUser, KemCore};
+use hybrid_array::{typenum::Unsigned, Array};
+use ml_kem::{kem::Params as KemParams, EncodedSizeUser};
 
 // ========================================================================== //
 // Encapsulation Key
@@ -13,10 +13,10 @@ use ml_kem::{EncodedSizeUser, KemCore};
 
 impl<P> Encode for EncapsulationKey<P>
 where
-    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+    P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
 {
-    type ET = ByteArray<<P as KemeleonByteArraySize>::ENCODED_EK_SIZE>;
     type Error = EncodeError;
+    type EncodedSize = <P as KemeleonByteArraySize>::ENCODED_EK_SIZE;
 
     /// In this formulation a is 1 indexed (as oposed to being 0 indexed)
     ///
@@ -31,8 +31,8 @@ where
     /// The intuition here is to accumulate (sum) the integer coefficients,
     /// resulting in a single larger integer whose intermediary bits are no longer
     /// biased.
-    fn as_bytes(&self) -> Self::ET {
-        let mut dst = Self::ET::from_fn(|_| 0u8);
+    fn as_bytes(&self) -> Array<u8, Self::EncodedSize> {
+        let mut dst = Array::<u8, Self::EncodedSize>::from_fn(|_| 0u8);
         // we know there will be no size error and we know the key will be encodable
         // so we do not need the result.
         let _ = self.encode_priv(&mut dst);
@@ -48,14 +48,14 @@ where
     ///     3     a[𝑖] ← ( 𝑟− sum(𝑗=1, 𝑖−1, 𝑝𝑘 [𝑗]) ) / ( 𝑞^(𝑖−1) ) mod 𝑞
     ///     4 return a
     /// ```
-    fn try_from_bytes(c: impl AsRef<[u8]>) -> Result<Self, Self::Error> {
-        EncapsulationKey::<P>::decode_priv(c.as_ref())
+    fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, Self::Error> {
+        EncapsulationKey::<P>::decode_priv(buf.as_ref())
     }
 }
 
 impl<P> Encodable for EncapsulationKey<P>
 where
-    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+    P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
 {
     fn is_encodable(&self) -> bool {
         let mut dst = ByteArray::<<P as KemeleonByteArraySize>::ENCODED_EK_SIZE>::from_fn(|_| 0u8);
@@ -67,7 +67,7 @@ const R_LEN: usize = RHO_LEN::USIZE;
 
 impl<P> EncapsulationKey<P>
 where
-    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+    P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
 {
     fn decode_priv(c: impl AsRef<[u8]>) -> Result<Self, EncodeError> {
         let ek_len = <P as KemeleonByteArraySize>::ENCODED_EK_SIZE::USIZE;
@@ -132,15 +132,18 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{mlkem::Kemx, ByteArr, FieldElement, ARR_LEN};
-    use ml_kem::{Encoded, MlKem1024, MlKem512, MlKem768};
+    use crate::{
+        mlkem::Kemx, ByteArr, FieldElement, MlKem1024Params, MlKem512Params, MlKem768Params,
+        OKemCore, ARR_LEN,
+    };
+    use ml_kem::Encoded;
     use num_bigint::BigUint;
 
     const ARR_LEN_U: usize = ARR_LEN::USIZE;
 
     fn entropy_check<P>()
     where
-        P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+        P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
     {
         let ek_kb =
             ByteArray::<<P as KemeleonByteArraySize>::ENCODED_EK_SIZE>::from_fn(|_| 0xff_u8);
@@ -150,12 +153,12 @@ mod tests {
         // all bits 1 => random mask byte will match the high bit mask
         assert_eq!(P::MSB_BITMASK, ek.byte);
 
-        let ek_kb_1 = ek.as_bytes();
+        let ek_kb_1 = EncapsulationKey::<P>::as_bytes(&ek);
         assert_eq!(
             hex::encode(&ek_kb),
             hex::encode(ek_kb_1),
             "failed K={}",
-            P::K::USIZE
+            <P as EncodingSize>::K::USIZE
         );
     }
 
@@ -163,16 +166,16 @@ mod tests {
     // doesn't miss setting any bits, leaving non-randomized features.
     #[test]
     fn bit_entropy_check() {
-        entropy_check::<MlKem512>();
-        entropy_check::<MlKem768>();
-        entropy_check::<MlKem1024>();
+        entropy_check::<MlKem512Params>();
+        entropy_check::<MlKem768Params>();
+        entropy_check::<MlKem1024Params>();
     }
 
     #[allow(clippy::cast_sign_loss)]
     #[allow(clippy::cast_possible_wrap)]
     fn sample_boundary_check<P>()
     where
-        P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+        P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
     {
         let ek_kb =
             ByteArray::<<P as KemeleonByteArraySize>::ENCODED_EK_SIZE>::from_fn(|_| 0xff_u8);
@@ -197,7 +200,8 @@ mod tests {
         // Similarly incrementing the high order byte will be high enough to overflow
         // into the HIGH_ORDER_BIT - making it unencodable.
         let mut t_hat = Ntt::zero::<P>();
-        t_hat[P::K::USIZE - 1][ARR_LEN_U - 1] = max_ntt_vals[P::K::USIZE - 1][ARR_LEN_U - 1] + 1;
+        t_hat[<P as EncodingSize>::K::USIZE - 1][ARR_LEN_U - 1] =
+            max_ntt_vals[<P as EncodingSize>::K::USIZE - 1][ARR_LEN_U - 1] + 1;
         let ek_k = EncapsulationKey::<P>::from_parts(&t_hat, &rho, 0xff);
 
         let mut dst = ByteArr::zero::<<P as KemeleonByteArraySize>::ENCODED_EK_SIZE>();
@@ -209,26 +213,26 @@ mod tests {
     // Explicitly test the boundary where we throw out samples for each variant
     #[test]
     fn sampling_boundary() {
-        sample_boundary_check::<MlKem512>();
-        sample_boundary_check::<MlKem768>();
-        sample_boundary_check::<MlKem1024>();
+        sample_boundary_check::<MlKem512Params>();
+        sample_boundary_check::<MlKem768Params>();
+        sample_boundary_check::<MlKem1024Params>();
     }
 
     fn consistency_check<P>()
     where
-        P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+        P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
     {
         let mut rng = rand::thread_rng();
         // This is the repeated-trial generate function and any key created
         // is guaranteed to be representable, otherwise it would have panicked
         let (_dk, ek) = Kemx::<P>::generate(&mut rng);
-        let dst = ek.as_bytes();
+        let dst = EncapsulationKey::<P>::as_bytes(&ek);
         let mut re_encode = dst.clone();
 
         for _ in 0..5 {
             // Encapsulation Key decoded from bytes sent over the wire.
             let recv_ek = EncapsulationKey::<P>::decode_priv(re_encode).expect("failed decode");
-            re_encode = recv_ek.as_bytes();
+            re_encode = EncapsulationKey::<P>::as_bytes(&recv_ek);
             assert_eq!(hex::encode(&re_encode), hex::encode(&dst));
         }
     }
@@ -236,22 +240,23 @@ mod tests {
     // Consistent encoding test - decode then re-encode you should get the same bytes
     #[test]
     fn consistency() {
-        consistency_check::<MlKem512>();
-        consistency_check::<MlKem768>();
-        consistency_check::<MlKem1024>();
+        consistency_check::<MlKem512Params>();
+        consistency_check::<MlKem768Params>();
+        consistency_check::<MlKem1024Params>();
     }
 
     fn value_check<P>(b: &[u8], v: &BigUint, description: &str)
     where
-        P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+        P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
     {
-        let encoded = Encoded::<P::EncapsulationKey>::try_from(b).unwrap();
+        let encoded = Encoded::<ml_kem::kem::EncapsulationKey<P>>::try_from(b).unwrap();
         let key = EncapsulationKey::<P> {
-            key: P::EncapsulationKey::from_bytes(&encoded),
+            key: ml_kem::kem::EncapsulationKey::<P>::from_bytes(&encoded),
             byte: 0x00,
         };
         if key.is_encodable() {
-            let kv = BigUint::from_bytes_le(&key.as_bytes()[..P::T_HAT_LEN::USIZE]);
+            let encoded = EncapsulationKey::<P>::as_bytes(&key);
+            let kv = BigUint::from_bytes_le(&encoded[..P::T_HAT_LEN::USIZE]);
             assert_eq!(&kv, v, "{description}");
         }
     }
@@ -259,7 +264,7 @@ mod tests {
     // make sure specific values map in the way we expect them to.
     fn specific_values_trial<P>()
     where
-        P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+        P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
     {
         let zero = ByteArr::zero::<<P as FipsByteArraySize>::ENCODED_EK_SIZE>();
         value_check::<P>(&zero, &BigUint::ZERO, "zero");
@@ -303,7 +308,7 @@ mod tests {
         x[<P as FipsByteArraySize>::ENCODED_EK_SIZE::USIZE - RHO_LEN::USIZE - 2] = 0x10_u8;
         value_check::<P>(
             &x,
-            &BigUint::from(3329_u64).pow((P::K::USIZE * ARR_LEN_U - 1) as u32),
+            &BigUint::from(3329_u64).pow((<P as EncodingSize>::K::USIZE * ARR_LEN_U - 1) as u32),
             ".... 00 01 00 => 3329 ^(P::K * 256 - 1)",
         );
 
@@ -314,7 +319,8 @@ mod tests {
         value_check::<P>(
             &x,
             &(BigUint::from(0x00ff_u64)
-                * BigUint::from(3329_u64).pow((P::K::USIZE * ARR_LEN_U - 1) as u32)),
+                * BigUint::from(3329_u64)
+                    .pow((<P as EncodingSize>::K::USIZE * ARR_LEN_U - 1) as u32)),
             ".... 00 f0 0f => (0x0ff) * 3329 ^(P::K * 256 - 1)",
         );
 
@@ -326,21 +332,21 @@ mod tests {
 
     #[test]
     fn specific_values() {
-        specific_values_trial::<MlKem512>();
-        specific_values_trial::<MlKem768>();
-        specific_values_trial::<MlKem1024>();
+        specific_values_trial::<MlKem512Params>();
+        specific_values_trial::<MlKem768Params>();
+        specific_values_trial::<MlKem1024Params>();
     }
 
     fn encode_decode_trial<P>()
     where
-        P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+        P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
     {
         let mut rng = rand::thread_rng();
         // This is the repeated trial generate from random and any key created
         // is guaranteed to be representable, otherwise it would have panicked
         let (_dk, ek) = Kemx::<P>::generate(&mut rng);
         let orig = ek.key.as_bytes();
-        let dst = ek.as_bytes();
+        let dst = EncapsulationKey::<P>::as_bytes(&ek);
 
         // Encapsulation Key decoded from bytes sent over the wire.
         let recv_ek = EncapsulationKey::<P>::decode_priv(dst).expect("failed decode");
@@ -355,9 +361,9 @@ mod tests {
 
     #[test]
     fn encode_decode() {
-        encode_decode_trial::<ml_kem::MlKem512>();
-        encode_decode_trial::<ml_kem::MlKem768>();
-        encode_decode_trial::<ml_kem::MlKem1024>();
+        encode_decode_trial::<ml_kem::MlKem512Params>();
+        encode_decode_trial::<ml_kem::MlKem768Params>();
+        encode_decode_trial::<ml_kem::MlKem1024Params>();
     }
 
     fn test_encode_decode(encoded_key: &str, b: u8) {
@@ -369,13 +375,13 @@ mod tests {
             .expect("failed to build hybrid array");
         let ek_decoded_in =
             ml_kem::kem::EncapsulationKey::<ml_kem::MlKem512Params>::from_bytes(&ek_encoded);
-        let ek_in = EncapsulationKey::<MlKem512> {
+        let ek_in = EncapsulationKey::<MlKem512Params> {
             key: ek_decoded_in,
             byte: b,
         };
 
         // Encode encapsulation key using Kemeleon
-        let mut dst = ByteArr::zero::<<MlKem512 as KemeleonByteArraySize>::ENCODED_EK_SIZE>();
+        let mut dst = ByteArr::zero::<<MlKem512Params as KemeleonByteArraySize>::ENCODED_EK_SIZE>();
         let encodable = ek_in.encode_priv(&mut dst).expect("failed kemeleon encode");
         assert!(
             encodable,
@@ -384,7 +390,7 @@ mod tests {
         );
 
         // Encapsulation Key decoded from bytes sent over the wire.
-        let recv_ek = EncapsulationKey::<MlKem512>::decode_priv(dst).expect("failed decode");
+        let recv_ek = EncapsulationKey::<MlKem512Params>::decode_priv(dst).expect("failed decode");
 
         assert_eq!(
             hex::encode(ek_in.key.as_bytes()),

@@ -1,11 +1,11 @@
-use super::{vector_decode, vector_encode, Encode};
+use super::{vector_decode, vector_encode};
 use crate::{
-    fips, ByteArr, ByteArray, EncodeError, FieldElement, FipsByteArraySize, FipsEncodingSize,
-    KemeleonByteArraySize, KemeleonEncodingSize, Ntt,
+    fips, ByteArr, ByteArray, Encode, EncodeError, FieldElement, FipsByteArraySize,
+    FipsEncodingSize, KemeleonByteArraySize, KemeleonEncodingSize, Ntt,
 };
 
 use hybrid_array::ArraySize;
-use ml_kem::KemCore;
+use ml_kem::kem::{Kem, Params as KemParams};
 use rand::{CryptoRng, RngCore};
 use rand_core::CryptoRngCore;
 use sha2::Sha256;
@@ -16,33 +16,28 @@ mod precomputed;
 use precomputed::get_eq_set;
 mod hkdf_rng;
 use hkdf_rng::HkdfRng;
-use hybrid_array::typenum::Unsigned;
+use hybrid_array::{typenum::Unsigned, Array};
 
 // ========================================================================== //
 // CipherText
 // ========================================================================== //
 
 pub use crate::mlkem::KCiphertext as Ciphertext;
-#[allow(clippy::module_name_repetitions)]
-pub use crate::mlkem::KEncodedCiphertext as EncodedCiphertext;
 
-impl<P> Encode for EncodedCiphertext<P>
+impl<P> Encode for Ciphertext<P>
 where
-    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+    P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
 {
-    /// Encoded Cuphertext Type
-    type ET = ByteArray<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>;
-
-    /// Error Type returned on failed decode
+    type EncodedSize = <P as KemeleonByteArraySize>::ENCODED_CT_SIZE;
     type Error = EncodeError;
 
-    fn as_bytes(&self) -> Self::ET {
-        self.0.clone()
+    fn as_bytes(&self) -> Array<u8, Self::EncodedSize> {
+        self.bytes.clone()
     }
 
-    fn try_from_bytes(b: impl AsRef<[u8]>) -> Result<Self, Self::Error> {
+    fn try_from_bytes<B: AsRef<[u8]>>(buf: B) -> Result<Self, Self::Error> {
         let ct_len = <P as KemeleonByteArraySize>::ENCODED_CT_SIZE::USIZE;
-        let arr = &b.as_ref();
+        let arr = &buf.as_ref();
 
         if arr.is_empty() {
             return Err(EncodeError::invalid_ctxt_len(0_usize));
@@ -51,8 +46,7 @@ where
         }
 
         let dst = ByteArray::<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>::from_fn(|i| arr[i]);
-
-        Ok(EncodedCiphertext::<P>(dst))
+        Ciphertext::<P>::decode(dst)
     }
 }
 
@@ -60,14 +54,13 @@ const HKDF_INFO: [u8; 40] = *b"kemeleon ct hkdf random number generator";
 
 impl<P> Ciphertext<P>
 where
-    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+    P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
 {
     pub(crate) fn new(
-        fips_ct: &ml_kem::Ciphertext<P>,
-        ss: &ml_kem::SharedKey<P>,
+        fips_ct: &ml_kem::Ciphertext<Kem<P>>,
+        ss: &ml_kem::SharedKey<Kem<P>>,
     ) -> Result<(bool, Self), EncodeError> {
         let mut kemeleon_ct = Self {
-            encoded: false,
             bytes: ByteArr::zero::<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>(),
             fips: fips_ct.clone(),
         };
@@ -82,11 +75,10 @@ where
     // TODO: find a good way to expose this
     #[allow(dead_code)]
     fn new_from_rng<R: RngCore + CryptoRng>(
-        fips_ct: &ml_kem::Ciphertext<P>,
+        fips_ct: &ml_kem::Ciphertext<Kem<P>>,
         rng: &mut R,
     ) -> Result<(bool, Self), EncodeError> {
         let mut kemeleon_ct = Self {
-            encoded: false,
             bytes: ByteArr::zero::<<P as KemeleonByteArraySize>::ENCODED_CT_SIZE>(),
             fips: fips_ct.clone(),
         };
@@ -137,11 +129,10 @@ where
 
         // ml_kem::Ciphertext = c1 || c2
         fips_ct[fips_u_len..].copy_from_slice(c2);
-        let fips =
-            ml_kem::Ciphertext::<P>::try_from(&fips_ct[..]).map_err(EncodeError::MlKemError)?;
+        let fips = ml_kem::Ciphertext::<Kem<P>>::try_from(&fips_ct[..])
+            .map_err(EncodeError::MlKemError)?;
 
         Ok(Self {
-            encoded: true,
             bytes: ct_bytes,
             fips,
         })
@@ -211,14 +202,17 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::mlkem::{KCiphertext, KEncodedCiphertext, Kemx, MAX_RETRIES};
+    use crate::{
+        mlkem::{KCiphertext, Kemx, MAX_RETRIES},
+        OKemCore,
+    };
 
     use kem::{Decapsulate, Encapsulate};
-    use ml_kem::{MlKem1024, MlKem512, MlKem768};
+    use ml_kem::{MlKem1024Params, MlKem512Params, MlKem768Params};
 
     fn encode_decode_trial<P>(desc: &str)
     where
-        P: ml_kem::KemCore + FipsByteArraySize + KemeleonByteArraySize,
+        P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
     {
         let mut rng = rand::thread_rng();
         // use Kemx::generate so that we don't have to worry about the
@@ -250,12 +244,10 @@ mod test {
             i < MAX_RETRIES,
             "{desc}: failed to find an encodable ciphertext - not possible"
         );
-        // <<<
-        // <<<
 
         let ct_bytes = kemeleon_ct.bytes;
-        let ct_bytes_recv = KEncodedCiphertext::try_from_bytes(ct_bytes)
-            .unwrap_or_else(|e| panic!("{desc} failed to parse KEncodedCiphertext {e}"));
+        let ct_bytes_recv = Ciphertext::<P>::try_from_bytes(ct_bytes)
+            .unwrap_or_else(|e| panic!("{desc} failed to parse KCiphertext {e}"));
 
         let ct_recv = KCiphertext::<P>::decode(&ct_bytes_recv)
             .unwrap_or_else(|e| panic!("{desc}: failed decode {e}"));
@@ -272,8 +264,8 @@ mod test {
 
     #[test]
     fn encode_decode_ct() {
-        encode_decode_trial::<MlKem512>("MlKem512 Du:10, Dv:4");
-        encode_decode_trial::<MlKem768>("MlKem768 Du:10, Dv:4");
-        encode_decode_trial::<MlKem1024>("MlKem1024 Du:11, Dv:5");
+        encode_decode_trial::<MlKem512Params>("MlKem512 Du:10, Dv:4");
+        encode_decode_trial::<MlKem768Params>("MlKem768 Du:10, Dv:4");
+        encode_decode_trial::<MlKem1024Params>("MlKem1024 Du:11, Dv:5");
     }
 }

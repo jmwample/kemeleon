@@ -29,6 +29,19 @@ pub enum EncodeError {
     DecapsulationError,
     /// The provided buffer is insufficient
     DstBufError(Internal),
+    /// Encapsulation Key is Not Encodable
+    ///
+    /// Only used in contexts where not being encodable makes something fallible.
+    NotEncodable, // /// Encapsulation Key is Not Encodable
+                  // ///
+                  // /// Only used in contexts where not being encodable makes something fallible.
+                  // /// Still contains the resulting Encapsulation Key object in case you wish to ignore this error.
+                  // EKNotEncodable<P>(EncapsulationKey<P>),
+                  // /// Ciphertext is Not Encodable
+                  // ///
+                  // /// Only used in contexts where not being encodable makes something fallible.
+                  // /// Still contains the resulting Ciphertext object in case you wish to ignore this error.
+                  // CTNotEncodable<P>(Ciphertext<P>),
 }
 
 impl core::error::Error for EncodeError {}
@@ -42,6 +55,9 @@ impl core::fmt::Display for EncodeError {
             EncodeError::BadRngSource => write!(f, "{BAD_RNG}"),
             EncodeError::MlKemError(e) => write!(f, "ml_kem error: {e}"),
             EncodeError::DstBufError(e) => write!(f, "dst buffer issue: {e}"),
+            EncodeError::NotEncodable => write!(f, "object is not encodable using kemeleon"),
+            // EncodeError::EKNotEncodable(_) => write!(f, "encapsulation key is not encodable"),
+            // EncodeError::CTNotEncodable(_) => write!(f, "ciphertext is not encodable"),
         }
     }
 }
@@ -53,6 +69,30 @@ impl From<TryFromSliceError> for EncodeError {
 }
 
 impl EncodeError {
+    pub(crate) fn parse_error(s: &'static str) -> Self {
+        #[cfg(feature = "alloc")]
+        {
+            Self::ParseError(s.into())
+        }
+
+        #[cfg(not(feature = "alloc"))]
+        {
+            Self::ParseError(s)
+        }
+    }
+
+    pub(crate) fn array_too_short(__want: usize, __have: usize) -> Self {
+        #[cfg(feature = "alloc")]
+        {
+            Self::ParseError(format!("{ARRAY_TOO_SHORT}: {__have} < {__want}"))
+        }
+
+        #[cfg(not(feature = "alloc"))]
+        {
+            Self::ParseError(ARRAY_TOO_SHORT)
+        }
+    }
+
     pub(crate) fn bad_dst_array(__want: usize, __have: usize) -> Self {
         #[cfg(feature = "alloc")]
         {
@@ -96,3 +136,4 @@ const INVALID_CTXT_LENGTH: &str = "incorrect ciphertext length";
 const INCORRECT_EK_LENGTH: &str = "incorrect encapsulation key length";
 const MLKEM_ENCAP_ERR: &str = "ML-KEM encapsulation error";
 const BAD_RNG: &str = "Failed iterated operation: rng source insufficient";
+const ARRAY_TOO_SHORT: &str = "provided data buffer was too short to parse";

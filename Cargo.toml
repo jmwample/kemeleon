@@ -22,13 +22,14 @@ rustdoc-args = [
 
 [features]
 default=[]
-deterministic = ["ml-kem/deterministic"]
 alloc = []
 
 [dependencies]
 num-bigint = "0.4.6"
 rand = "0.8.5"
-ml-kem = { version="0.2.1" }
+# ml-kem = { version = "0.3.0-pre" }
+ml-kem = { git="https://github.com/jmwample/KEMs.git",  branch="params"}
+# ml-kem = { path="../KEMs/ml-kem/" }
 hybrid-array = {version  = "0.2.0-rc.10", features=["extra-sizes"]}
 rand_core = "0.6.4"
 kem = "0.3.0-pre.0"
@@ -40,11 +41,10 @@ generic-array = "1.1.0"
 hkdf = "0.12.4"
 sha2 = "0.10.8"
 
+hex =  { version = "0.4.3", features = ["serde"] }
+
 [dev-dependencies]
 
-hex =  { version = "0.4.3", features = ["serde"] }
 hex-literal = "0.4.1"
 num-rational = "0.4.2"
 serde = { version = "1.0.208", features = ["derive"] }
-serde_json = "1.0.125"
-x25519-dalek = { version = "2.0.1", features = ["static_secrets", "getrandom", "reusable_secrets"]}

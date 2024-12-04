@@ -8,36 +8,16 @@ pub use crate::mlkem::KDecapsulationKey as DecapsulationKey;
 pub use crate::mlkem::KEncapsulationKey as EncapsulationKey;
 use crate::FipsByteArraySize;
 use crate::KemeleonByteArraySize;
-use crate::{EncodeError, EncodingSize, FieldElement};
+use crate::{Encode, EncodeError, EncodingSize, FieldElement};
 
 use core::cmp::min;
 
 use hybrid_array::typenum::Unsigned;
-use ml_kem::KemCore;
+use ml_kem::kem::Params as KemParams;
 use num_bigint::BigUint;
 
 mod ciphertext;
 mod encapsulation_key;
-
-// TODO: is this used / useful?
-/// Generic trait for Encodable objects
-pub trait Encode
-where
-    Self: Sized,
-{
-    /// Encoded type (i.e Encoded Encapsulation Key, or Encoded Ciphertext)
-    type ET;
-
-    /// Error Type returned on failed decode
-    type Error;
-
-    /// Convert object to the serialized byte representation
-    fn as_bytes(&self) -> Self::ET;
-
-    /// Try to parse from bytes. Throws an [`EncodeError::ParseError`] if the
-    /// provided value cannot be parsed for any reason.
-    fn try_from_bytes(c: impl AsRef<[u8]>) -> Result<Self, Self::Error>;
-}
 
 /// Trait indicating that an object could fail sampling, and testing whether that
 /// object passes or fails that sampling.
@@ -51,7 +31,7 @@ pub(crate) fn vector_encode<P>(
     mut c: impl AsMut<[u8]>,
 ) -> Result<bool, EncodeError>
 where
-    P: KemCore + FipsByteArraySize + KemeleonByteArraySize,
+    P: KemParams + FipsByteArraySize + KemeleonByteArraySize,
 {
     let dst = c.as_mut();
     if dst.len() < P::T_HAT_LEN::USIZE {
@@ -83,7 +63,7 @@ pub(crate) fn vector_decode<P>(
     mut p: impl AsMut<[u16]>,
 ) -> Result<(), EncodeError>
 where
-    P: KemCore + EncodingSize,
+    P: KemParams + EncodingSize,
 {
     if c.as_ref().len() < P::T_HAT_LEN::USIZE {
         return Err(EncodeError::invalid_ctxt_len(c.as_ref().len()));
